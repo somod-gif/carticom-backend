@@ -1,0 +1,87 @@
+spring:
+  application:
+    name: carticom-api
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/carticom}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  sql:
+    init:
+      mode: always
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: ${SERVER_PORT:${PORT:8080}}
+  forward-headers-strategy: framework
+
+jwt:
+  secret: ${JWT_SECRET:ybgBvi3tBwBPzc2s20aZgC2B37CnEgDxhiDTSwCj55k=}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+byteship:
+  api-key: ${BYTESHIP_API_KEY:}
+  base-url: https://api.byteship.dev
+
+sendbyte:
+  api-key: ${SENDBYTE_API_KEY:}
+  base-url: ${SENDBYTE_API_URL:https://api.sendbyte.africa/v1}
+  from-email: ${SENDBYTE_FROM_EMAIL:Carticom <orders@carticom.cv>}
+
+cencori:
+  api-key: ${CENCORI_API_KEY:}
+  model: ${CENCORI_MODEL:groq/compound-mini}
+  base-url: https://api.cencori.com/v1
+
+seeder:
+  enabled: ${SEED_DEMO_DATA:false}
+
+app:
+  base-url: ${APP_BASE_URL:https://carticom.cv}
+
+admin:
+  email: ${ADMIN_EMAIL:admin@carticom.cv}
+  password: ${ADMIN_PASSWORD:Carticom#Admin1}
+
+paystack:
+  secret-key: ${PAYSTACK_SECRET_KEY:}
+  base-url: https://api.paystack.co
+
+flutterwave:
+  secret-key: ${FLUTTERWAVE_SECRET_KEY:}
+  base-url: https://api.flutterwave.com/v3
+
+nomba:
+  client-id: ${NOMBA_CLIENT_ID:}
+  client-secret: ${NOMBA_CLIENT_SECRET:}
+  account-id: ${NOMBA_ACCOUNT_ID:}
+  base-url: ${NOMBA_BASE_URL:https://sandbox.nomba.com/v1}
+  webhook-signature-key: ${NOMBA_WEBHOOK_SIGNATURE_KEY:}
+
+resend:
+  api-key: ${RESEND_API_KEY:}
+  from-email: ${RESEND_FROM_EMAIL:hello@carticom.dev}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
