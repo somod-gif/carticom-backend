@@ -23,10 +23,17 @@ public class WaitlistEntry {
     @Column(nullable = false)
     private String email;
 
+    private String businessName;
+
+    private String phone;
+
+    private String status;
+
     private LocalDateTime createdAt;
 
     @PrePersist
     void onCreate() {
         if (createdAt == null) createdAt = LocalDateTime.now();
+        if (status == null || status.isBlank()) status = "WAITING";
     }
 }
