@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -21,4 +23,8 @@ public class UpdateStoreSettingsRequest {
     @Pattern(regexp = "GRID|HERO_GRID|LIST",
             message = "Unknown storefront layout")
     private String layout;
+
+    private Map<String, Object> business;
+
+    private Map<String, Object> notifications;
 }

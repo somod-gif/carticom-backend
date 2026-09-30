@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Data
 @NoArgsConstructor
@@ -18,6 +19,14 @@ public class StoreResponse {
     private String category;
     private String theme;
     private String layout;
+    private String description;
+    private String email;
+    private String phone;
+    private String address;
+    private String country;
+    private String currency;
+    private Map<String, Object> business;
+    private Map<String, Object> notifications;
     private String sellerEmail;
     private LocalDateTime createdAt;
 }

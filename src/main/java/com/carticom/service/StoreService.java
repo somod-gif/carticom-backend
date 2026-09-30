@@ -9,11 +9,16 @@ import com.carticom.model.Store;
 import com.carticom.model.User;
 import com.carticom.repository.StoreRepository;
 import com.carticom.repository.UserRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -28,6 +33,7 @@ public class StoreService {
     private final StoreRepository storeRepository;
     private final UserRepository userRepository;
     private final StoreAccessService storeAccessService;
+    private final ObjectMapper objectMapper;
 
     public StoreResponse createStore(String sellerEmail, CreateStoreRequest request) {
         storeAccessService.requireVendor(sellerEmail);
@@ -56,6 +62,12 @@ public class StoreService {
                 .name(name)
                 .slug(slug)
                 .category(request.resolveCategory())
+                .description(request.getDescription())
+                .email(request.getEmail())
+                .phone(request.getPhone())
+                .address(request.getAddress())
+                .country(request.getCountry())
+                .currency(request.getCurrency())
                 .seller(seller)
                 .build();
 
@@ -129,7 +141,18 @@ public class StoreService {
 
     public StoreResponse updateSettings(String sellerEmail, UpdateStoreSettingsRequest request) {
         Store store = storeAccessService.resolveStore(sellerEmail);
+        return applySettings(store, request);
+    }
 
+    public StoreResponse updateSettings(String sellerEmail, Long storeId, UpdateStoreSettingsRequest request) {
+        Store store = storeAccessService.resolveStore(sellerEmail);
+        if (!store.getId().equals(storeId)) {
+            throw new ResourceNotFoundException("Store not found");
+        }
+        return applySettings(store, request);
+    }
+
+    private StoreResponse applySettings(Store store, UpdateStoreSettingsRequest request) {
         if (request.getName() != null && !request.getName().isBlank()) {
             store.setName(request.getName().trim());
         }
@@ -147,6 +170,28 @@ public class StoreService {
                 throw new BadRequestException("Unknown storefront layout: " + request.getLayout());
             }
             store.setLayout(request.getLayout());
+        }
+
+        Map<String, Object> business = request.getBusiness();
+        if (business != null) {
+            String businessName = str(business.get("businessName"));
+            if (businessName != null && !businessName.isBlank()) {
+                store.setName(businessName.trim());
+            }
+            String email = str(business.get("email"));
+            if (email != null && !email.isBlank()) store.setEmail(email.trim());
+            String phone = str(business.get("phone"));
+            if (phone != null) store.setPhone(phone.trim());
+            String address = str(business.get("address"));
+            if (address != null) store.setAddress(address.trim());
+        }
+
+        if (request.getNotifications() != null) {
+            try {
+                store.setNotifications(objectMapper.writeValueAsString(request.getNotifications()));
+            } catch (JsonProcessingException e) {
+                throw new BadRequestException("Invalid notifications payload");
+            }
         }
 
         storeRepository.save(store);
@@ -174,6 +219,24 @@ public class StoreService {
     }
 
     private StoreResponse mapToResponse(Store store) {
+        Map<String, Object> business = new HashMap<>();
+        business.put("businessName", store.getName());
+        business.put("email", store.getEmail() != null ? store.getEmail()
+                : (store.getSeller() != null ? store.getSeller().getEmail() : null));
+        business.put("phone", store.getPhone() != null ? store.getPhone()
+                : (store.getSeller() != null ? store.getSeller().getPhone() : null));
+        business.put("address", store.getAddress());
+
+        Map<String, Object> notifications = null;
+        if (store.getNotifications() != null && !store.getNotifications().isBlank()) {
+            try {
+                notifications = objectMapper.readValue(store.getNotifications(),
+                        new TypeReference<Map<String, Object>>() {});
+            } catch (JsonProcessingException e) {
+                log.warn("Failed to parse notifications for store {}", store.getId(), e);
+            }
+        }
+
         return StoreResponse.builder()
                 .id(store.getId())
                 .name(store.getName())
@@ -181,6 +244,14 @@ public class StoreService {
                 .category(store.getCategory())
                 .theme(store.getTheme())
                 .layout(store.getLayout())
+                .description(store.getDescription())
+                .email(store.getEmail())
+                .phone(store.getPhone())
+                .address(store.getAddress())
+                .country(store.getCountry())
+                .currency(store.getCurrency())
+                .business(business)
+                .notifications(notifications)
                 .sellerEmail(store.getSeller().getEmail())
                 .createdAt(store.getCreatedAt())
                 .build();

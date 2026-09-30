@@ -51,7 +51,7 @@ public class Product {
     @Column(nullable = false)
     private Boolean isFeatured;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(precision = 10, scale = 2)
     private BigDecimal weight;
 
     private String unit;

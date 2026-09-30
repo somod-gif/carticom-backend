@@ -184,4 +184,16 @@ public class AuthController {
         authService.resetPassword(request.getToken(), request.getPassword());
         return ResponseEntity.ok(new MessageResponse("Password updated successfully"));
     }
+
+    @PutMapping("/password")
+    @Operation(summary = "Change current user's password",
+            description = "Verifies the current password and sets a new one (min 8 characters)")
+    @ApiResponse(responseCode = "200", description = "Password updated")
+    @ApiResponse(responseCode = "400", description = "Wrong current password or weak new password")
+    public ResponseEntity<MessageResponse> changePassword(
+            Authentication authentication,
+            @RequestBody com.carticom.dto.auth.ChangePasswordRequest request) {
+        authService.changePassword(authentication.getName(), request);
+        return ResponseEntity.ok(new MessageResponse("Password updated successfully"));
+    }
 }

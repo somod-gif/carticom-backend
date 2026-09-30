@@ -177,6 +177,23 @@ public class AuthService {
         log.info("Password reset completed for {}", user.getEmail());
     }
 
+    public void changePassword(String email, com.carticom.dto.auth.ChangePasswordRequest request) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BadRequestException("Account not found"));
+
+        if (request.currentPassword() == null
+                || !passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            throw new BadRequestException("Current password is incorrect");
+        }
+        if (request.newPassword() == null || request.newPassword().length() < 8) {
+            throw new BadRequestException("New password must be at least 8 characters");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+        log.info("Password changed for {}", email);
+    }
+
     private String resetEmailHtml(String fullName, String resetUrl) {
         String firstName = fullName == null || fullName.isBlank() ? "there" : fullName.split(" ")[0];
         return """

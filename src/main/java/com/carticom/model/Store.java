@@ -35,6 +35,21 @@ public class Store {
     @Column(nullable = false)
     private String layout = "GRID";
 
+    private String description;
+
+    private String email;
+
+    private String phone;
+
+    private String address;
+
+    private String country;
+
+    private String currency;
+
+    @Column(columnDefinition = "text")
+    private String notifications;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;

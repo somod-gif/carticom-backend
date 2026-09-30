@@ -102,4 +102,16 @@ public class StoreController {
         StoreResponse response = storeService.updateSettings(authentication.getName(), request);
         return ResponseEntity.ok(response);
     }
+
+    @PutMapping("/{id}/settings")
+    @Operation(summary = "Update settings for a specific store",
+            description = "Updates business info, notification preferences, theme and layout")
+    @ApiResponse(responseCode = "200", description = "Settings updated")
+    @ApiResponse(responseCode = "404", description = "Store not found or not owned by caller")
+    public ResponseEntity<StoreResponse> updateStoreSettings(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateStoreSettingsRequest request) {
+        return ResponseEntity.ok(storeService.updateSettings(authentication.getName(), id, request));
+    }
 }

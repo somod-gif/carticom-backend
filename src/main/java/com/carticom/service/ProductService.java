@@ -56,7 +56,7 @@ public class ProductService {
                 .category(request.getCategory())
                 .isActive(request.getIsActive() != null ? request.getIsActive() : true)
                 .isFeatured(request.getIsFeatured() != null ? request.getIsFeatured() : false)
-                .weight(request.getWeight())
+                .weight(request.getWeight() != null ? request.getWeight() : java.math.BigDecimal.ZERO)
                 .unit(request.getUnit())
                 .lowStockThreshold(request.getLowStockThreshold() != null ? request.getLowStockThreshold() : 5)
                 .soldCount(0)
