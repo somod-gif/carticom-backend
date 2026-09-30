@@ -27,6 +27,8 @@ public class StoreResponse {
     private String currency;
     private Map<String, Object> business;
     private Map<String, Object> notifications;
+    private String logoUrl;
+    private String bannerUrl;
     private String sellerEmail;
     private LocalDateTime createdAt;
 }

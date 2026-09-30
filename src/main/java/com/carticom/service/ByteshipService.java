@@ -113,8 +113,13 @@ public class ByteshipService {
                     .build();
 
         } catch (WebClientResponseException e) {
-            log.error("Byteship API error: {}", e.getMessage());
-            throw new BadRequestException("Failed to upload image: " + e.getMessage());
+            log.warn("Byteship API error ({}), falling back to local storage: {}",
+                    e.getStatusCode(), e.getMessage());
+            return storeLocally(file, contentType);
+        } catch (RuntimeException e) {
+            log.warn("Byteship unreachable ({}), falling back to local storage",
+                    e.getMessage());
+            return storeLocally(file, contentType);
         } catch (IOException e) {
             log.error("Failed to read file: {}", e.getMessage());
             throw new BadRequestException("Failed to read file");

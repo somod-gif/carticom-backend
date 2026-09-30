@@ -50,6 +50,10 @@ public class Store {
     @Column(columnDefinition = "text")
     private String notifications;
 
+    private String logoUrl;
+
+    private String bannerUrl;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;

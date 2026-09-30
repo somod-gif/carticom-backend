@@ -252,8 +252,32 @@ public class StoreService {
                 .currency(store.getCurrency())
                 .business(business)
                 .notifications(notifications)
+                .logoUrl(store.getLogoUrl())
+                .bannerUrl(store.getBannerUrl())
                 .sellerEmail(store.getSeller().getEmail())
                 .createdAt(store.getCreatedAt())
                 .build();
+    }
+
+    public StoreResponse setLogo(String sellerEmail, Long storeId, String url) {
+        Store store = resolveOwnedStore(sellerEmail, storeId);
+        store.setLogoUrl(url);
+        storeRepository.save(store);
+        return mapToResponse(store);
+    }
+
+    public StoreResponse setBanner(String sellerEmail, Long storeId, String url) {
+        Store store = resolveOwnedStore(sellerEmail, storeId);
+        store.setBannerUrl(url);
+        storeRepository.save(store);
+        return mapToResponse(store);
+    }
+
+    private Store resolveOwnedStore(String sellerEmail, Long storeId) {
+        Store store = storeAccessService.resolveStore(sellerEmail);
+        if (!store.getId().equals(storeId)) {
+            throw new ResourceNotFoundException("Store not found");
+        }
+        return store;
     }
 }

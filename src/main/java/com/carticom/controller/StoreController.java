@@ -1,8 +1,10 @@
 package com.carticom.controller;
 
+import com.carticom.dto.image.ImageUploadResponse;
 import com.carticom.dto.store.CreateStoreRequest;
 import com.carticom.dto.store.StoreResponse;
 import com.carticom.dto.store.UpdateStoreSettingsRequest;
+import com.carticom.service.ByteshipService;
 import com.carticom.service.StoreService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -10,9 +12,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -23,6 +27,7 @@ import java.util.List;
 public class StoreController {
 
     private final StoreService storeService;
+    private final ByteshipService byteshipService;
 
     @PostMapping
     @Operation(summary = "Create a new store", description = "Creates a store for the authenticated user with auto-generated slug")
@@ -113,5 +118,29 @@ public class StoreController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateStoreSettingsRequest request) {
         return ResponseEntity.ok(storeService.updateSettings(authentication.getName(), id, request));
+    }
+
+    @PostMapping(value = "/{id}/logo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload store logo")
+    @ApiResponse(responseCode = "200", description = "Logo uploaded and saved")
+    @ApiResponse(responseCode = "404", description = "Store not found or not owned by caller")
+    public ResponseEntity<StoreResponse> uploadLogo(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) {
+        ImageUploadResponse uploaded = byteshipService.uploadImage(file);
+        return ResponseEntity.ok(storeService.setLogo(authentication.getName(), id, uploaded.getUrl()));
+    }
+
+    @PostMapping(value = "/{id}/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload store banner")
+    @ApiResponse(responseCode = "200", description = "Banner uploaded and saved")
+    @ApiResponse(responseCode = "404", description = "Store not found or not owned by caller")
+    public ResponseEntity<StoreResponse> uploadBanner(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file) {
+        ImageUploadResponse uploaded = byteshipService.uploadImage(file);
+        return ResponseEntity.ok(storeService.setBanner(authentication.getName(), id, uploaded.getUrl()));
     }
 }

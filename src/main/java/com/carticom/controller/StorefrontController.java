@@ -37,7 +37,8 @@ public class StorefrontController {
     private final JwtTokenProvider jwtTokenProvider;
 
     public record StorefrontStoreDto(Long id, String name, String slug, String category, String theme,
-                                     String layout, Integer productCount, String createdAt) {}
+                                     String layout, Integer productCount, String createdAt,
+                                     String logoUrl, String bannerUrl) {}
 
     public record StorefrontProductDto(Long id, Long storeId, String name, String slug, String description,
                                        BigDecimal price, BigDecimal compareAtPrice, String currency,
@@ -169,7 +170,8 @@ public class StorefrontController {
         int productCount = (int) productRepository.findByStoreIdAndIsActive(s.getId(), true).size();
         return new StorefrontStoreDto(
                 s.getId(), s.getName(), s.getSlug(), s.getCategory(), s.getTheme(), s.getLayout(),
-                productCount, s.getCreatedAt() != null ? s.getCreatedAt().toString() : null);
+                productCount, s.getCreatedAt() != null ? s.getCreatedAt().toString() : null,
+                s.getLogoUrl(), s.getBannerUrl());
     }
 
     private StorefrontProductDto mapProduct(com.carticom.model.Product p) {
