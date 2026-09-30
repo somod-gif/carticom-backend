@@ -36,7 +36,7 @@ public class DemoDataSeeder implements CommandLineRunner {
     @Value("${admin.email}")
     private String adminEmail;
 
-    @Value("${admin.password}")
+    @Value("${admin.password:}")
     private String adminPassword;
 
     @Override
@@ -132,6 +132,10 @@ public class DemoDataSeeder implements CommandLineRunner {
     }
 
     private void seedAdmin() {
+        if (adminPassword == null || adminPassword.isBlank()) {
+            log.info("Seeder: ADMIN_PASSWORD not set - skipping admin account creation");
+            return;
+        }
         if (userRepository.findByEmail(adminEmail).isPresent()) {
             return;
         }

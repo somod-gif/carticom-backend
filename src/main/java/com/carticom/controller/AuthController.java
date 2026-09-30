@@ -42,7 +42,7 @@ public class AuthController {
     private final UserRepository userRepository;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
-    @Value("${app.base-url:http://localhost:3000}")
+    @Value("${app.base-url}")
     private String baseUrl;
 
     private ResponseCookie refreshCookie(String token, long maxAgeSeconds) {

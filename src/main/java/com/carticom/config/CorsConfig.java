@@ -19,13 +19,20 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
+        // Production origins first, then local development. Extra origins can be added
+        // per-deployment with the CORS_ALLOWED_ORIGINS environment variable (see
+        // cors.allowed-origins in application.yml) instead of editing this class.
         List<String> origins = new ArrayList<>(List.of(
-                "http://localhost:3000",
-                "http://localhost:3001",
                 "https://carticom.cv",
                 "https://www.carticom.cv",
-                "https://carticom.dev",
-                "https://www.carticom.dev"
+                "https://carticom-backend.pxxlspace.cv",
+                // Live Vercel deployment URL — kept so the site keeps working from the
+                // *.vercel.app host until the carticom.cv domain is fully switched over.
+                "https://carticom.vercel.app",
+                // Local development
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://127.0.0.1:3000"
         ));
         if (allowedOriginsProp != null && !allowedOriginsProp.isBlank()) {
             for (String origin : allowedOriginsProp.split(",")) {

@@ -38,12 +38,18 @@ public class StorefrontController {
 
     public record StorefrontStoreDto(Long id, String name, String slug, String category, String theme,
                                      String layout, Integer productCount, String createdAt,
-                                     String logoUrl, String bannerUrl, String businessCategory) {}
+                                     String logoUrl, String bannerUrl, String businessCategory,
+                                     String description, String email, String phone, String address,
+                                     String country, String currency, String template,
+                                     String primaryColor, String secondaryColor, String fontFamily,
+                                     String facebookUrl, String instagramUrl, String twitterUrl,
+                                     String whatsappNumber, String seoTitle, String seoDescription,
+                                     String customCss, String status) {}
 
     public record StorefrontProductDto(Long id, Long storeId, String name, String slug, String description,
                                        BigDecimal price, BigDecimal compareAtPrice, String currency,
                                        Integer quantity, String sku, String imageUrl, Boolean active,
-                                       Boolean digital, String category, String images,
+                                       Boolean digital, String category, String categoryId, String images,
                                        String createdAt, String updatedAt) {}
 
     @GetMapping("/stores")
@@ -171,17 +177,26 @@ public class StorefrontController {
         return new StorefrontStoreDto(
                 s.getId(), s.getName(), s.getSlug(), s.getCategory(), s.getTheme(), s.getLayout(),
                 productCount, s.getCreatedAt() != null ? s.getCreatedAt().toString() : null,
-                s.getLogoUrl(), s.getBannerUrl(), s.getCategory());
+                s.getLogoUrl(), s.getBannerUrl(), s.getCategory(),
+                s.getDescription(), s.getEmail(), s.getPhone(), s.getAddress(), s.getCountry(),
+                s.getCurrency(), s.getTemplate(), s.getPrimaryColor(), s.getSecondaryColor(),
+                s.getFontFamily(), s.getFacebookUrl(), s.getInstagramUrl(), s.getTwitterUrl(),
+                s.getWhatsappNumber(),
+                s.getSeoTitle() != null ? s.getSeoTitle() : s.getName(),
+                s.getSeoDescription() != null ? s.getSeoDescription() : s.getDescription(),
+                s.getCustomCss(),
+                s.getStatus() != null ? s.getStatus() : "ACTIVE");
     }
 
     private StorefrontProductDto mapProduct(com.carticom.model.Product p) {
         Integer qty = p.getStockQuantity() != null ? p.getStockQuantity() : 0;
         Long storeId = p.getStore() != null ? p.getStore().getId() : null;
         String imageUrl = p.getImageUrl();
+        String category = p.getCategory();
         return new StorefrontProductDto(
                 p.getId(), storeId, p.getName(), null, p.getDescription(),
                 p.getPrice(), p.getCompareAtPrice(), "NGN", qty, p.getSku(), imageUrl,
-                Boolean.TRUE.equals(p.getIsActive()), false, p.getCategory(), imageUrl,
+                Boolean.TRUE.equals(p.getIsActive()), false, category, category, imageUrl,
                 p.getCreatedAt() != null ? p.getCreatedAt().toString() : null,
                 p.getUpdatedAt() != null ? p.getUpdatedAt().toString() : null);
     }

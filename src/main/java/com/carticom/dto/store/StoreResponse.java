@@ -30,6 +30,17 @@ public class StoreResponse {
     private String logoUrl;
     private String bannerUrl;
     private String status;
+    private String template;
+    private String primaryColor;
+    private String secondaryColor;
+    private String fontFamily;
+    private String facebookUrl;
+    private String instagramUrl;
+    private String twitterUrl;
+    private String whatsappNumber;
+    private String seoTitle;
+    private String seoDescription;
+    private String customCss;
     private String sellerEmail;
     private LocalDateTime createdAt;
 }

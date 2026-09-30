@@ -56,6 +56,37 @@ public class Store {
 
     private String status;
 
+    // ─── Storefront branding / customisation (edited from the dashboard) ───
+
+    /** Storefront template id, e.g. {@code fashion-luxury}. */
+    private String template;
+
+    private String primaryColor;
+
+    private String secondaryColor;
+
+    private String fontFamily;
+
+    // ─── Social / contact links ───
+
+    private String facebookUrl;
+
+    private String instagramUrl;
+
+    private String twitterUrl;
+
+    private String whatsappNumber;
+
+    // ─── SEO ───
+
+    private String seoTitle;
+
+    @Column(columnDefinition = "text")
+    private String seoDescription;
+
+    @Column(columnDefinition = "text")
+    private String customCss;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;

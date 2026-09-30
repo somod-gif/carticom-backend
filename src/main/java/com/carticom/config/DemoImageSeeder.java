@@ -64,6 +64,49 @@ public class DemoImageSeeder implements CommandLineRunner {
             store.setBannerUrl("/image/download.jpg");
             changed = true;
         }
+        // Give the demo store a real storefront template + brand palette so the
+        // dashboard template picker and storefront theming have something to show.
+        if (store.getTemplate() == null || store.getTemplate().isBlank()) {
+            store.setTemplate("fashion-luxury");
+            changed = true;
+        }
+        if (store.getPrimaryColor() == null || store.getPrimaryColor().isBlank()) {
+            store.setPrimaryColor("#c9a84c");
+            changed = true;
+        }
+        if (store.getSecondaryColor() == null || store.getSecondaryColor().isBlank()) {
+            store.setSecondaryColor("#1a1a2e");
+            changed = true;
+        }
+        if (store.getFontFamily() == null || store.getFontFamily().isBlank()) {
+            store.setFontFamily("Inter");
+            changed = true;
+        }
+        if (store.getDescription() == null || store.getDescription().isBlank()) {
+            store.setDescription("Contemporary African fashion, hand-tailored in Lagos. "
+                    + "Ankara, kente and leather pieces made to order.");
+            changed = true;
+        }
+        if (store.getPhone() == null || store.getPhone().isBlank()) {
+            store.setPhone("+234 802 000 0000");
+            changed = true;
+        }
+        if (store.getEmail() == null || store.getEmail().isBlank()) {
+            store.setEmail("hello@amakaslooks.cv");
+            changed = true;
+        }
+        if (store.getAddress() == null || store.getAddress().isBlank()) {
+            store.setAddress("14 Adeola Odeku Street, Victoria Island, Lagos");
+            changed = true;
+        }
+        if (store.getCountry() == null || store.getCountry().isBlank()) {
+            store.setCountry("Nigeria");
+            changed = true;
+        }
+        if (store.getCurrency() == null || store.getCurrency().isBlank()) {
+            store.setCurrency("NGN");
+            changed = true;
+        }
         if (changed) {
             storeRepository.save(store);
         }

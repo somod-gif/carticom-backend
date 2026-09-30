@@ -35,7 +35,11 @@ server:
   forward-headers-strategy: framework
 
 jwt:
-  secret: ${JWT_SECRET:ybgBvi3tBwBPzc2s20aZgC2B37CnEgDxhiDTSwCj55k=}
+  # REQUIRED. Base64-encoded HMAC-SHA signing key (must decode to >= 32 bytes).
+  # There is deliberately NO default: a hardcoded fallback would be public in this
+  # repository and would let anyone forge access tokens. Set JWT_SECRET in the
+  # deployment environment (generate with: openssl rand -base64 48).
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400000}
 
 byteship:
@@ -58,9 +62,18 @@ seeder:
 app:
   base-url: ${APP_BASE_URL:https://carticom.cv}
 
+# Public web origins allowed to call this API from a browser.
+# Comma-separated. The built-in list below covers the production domain and the
+# Vercel deployment URL; add preview URLs here (or via CORS_ALLOWED_ORIGINS)
+# instead of editing CorsConfig.
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+
 admin:
   email: ${ADMIN_EMAIL:admin@carticom.cv}
-  password: ${ADMIN_PASSWORD:Carticom#Admin1}
+  # No default on purpose. When ADMIN_PASSWORD is blank the demo seeder skips
+  # creating the admin account instead of falling back to a public password.
+  password: ${ADMIN_PASSWORD:}
 
 paystack:
   secret-key: ${PAYSTACK_SECRET_KEY:}

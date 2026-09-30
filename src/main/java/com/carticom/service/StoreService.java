@@ -101,8 +101,12 @@ public class StoreService {
         if (category == null) category = str(body.get("category"));
         if (category != null && !category.isBlank()) store.setCategory(category.trim());
 
-        String theme = str(body.get("template"));
-        if (theme == null) theme = str(body.get("theme"));
+        // Storefront template id picked in the dashboard (e.g. "fashion-luxury").
+        String template = str(body.get("template"));
+        if (template != null && !template.isBlank()) {
+            store.setTemplate(template.trim());
+        }
+        String theme = str(body.get("theme"));
         if (theme != null && THEMES.contains(theme.toUpperCase())) {
             store.setTheme(theme.toUpperCase());
         }
@@ -111,8 +115,52 @@ public class StoreService {
             store.setLayout(layout.toUpperCase());
         }
 
+        // Business / contact details shown on the public storefront
+        applyIfPresent(body, "description", store::setDescription);
+        applyIfPresent(body, "email", store::setEmail);
+        applyIfPresent(body, "phone", store::setPhone);
+        applyIfPresent(body, "address", store::setAddress);
+        applyIfPresent(body, "country", store::setCountry);
+        applyIfPresent(body, "currency", store::setCurrency);
+        applyIfPresent(body, "logoUrl", store::setLogoUrl);
+        applyIfPresent(body, "bannerUrl", store::setBannerUrl);
+
+        // Branding
+        applyIfPresent(body, "primaryColor", store::setPrimaryColor);
+        applyIfPresent(body, "secondaryColor", store::setSecondaryColor);
+        applyIfPresent(body, "fontFamily", store::setFontFamily);
+
+        // Social links
+        applyIfPresent(body, "facebookUrl", store::setFacebookUrl);
+        applyIfPresent(body, "instagramUrl", store::setInstagramUrl);
+        applyIfPresent(body, "twitterUrl", store::setTwitterUrl);
+        applyIfPresent(body, "whatsappNumber", store::setWhatsappNumber);
+
+        // SEO + custom CSS
+        applyIfPresent(body, "seoTitle", store::setSeoTitle);
+        applyIfPresent(body, "seoDescription", store::setSeoDescription);
+        applyIfPresent(body, "customCss", store::setCustomCss);
+
         storeRepository.save(store);
+        log.info("Store {} updated by {}", store.getSlug(), sellerEmail);
         return mapToResponse(store);
+    }
+
+    /**
+     * Applies a text field only when the payload actually contains the key, so a partial
+     * update never wipes unrelated values. Blank strings clear the column (stored as null).
+     */
+    private void applyIfPresent(Map<String, Object> body, String key,
+                                java.util.function.Consumer<String> setter) {
+        if (body == null || !body.containsKey(key)) {
+            return;
+        }
+        String value = str(body.get(key));
+        if (value == null || value.isBlank()) {
+            setter.accept(null);
+            return;
+        }
+        setter.accept(value.trim());
     }
 
     public StoreResponse setStatus(String sellerEmail, Long storeId, String status) {
@@ -271,6 +319,18 @@ public class StoreService {
                 .logoUrl(store.getLogoUrl())
                 .bannerUrl(store.getBannerUrl())
                 .status(store.getStatus() != null ? store.getStatus() : "ACTIVE")
+                .template(store.getTemplate())
+                .primaryColor(store.getPrimaryColor())
+                .secondaryColor(store.getSecondaryColor())
+                .fontFamily(store.getFontFamily())
+                .facebookUrl(store.getFacebookUrl())
+                .instagramUrl(store.getInstagramUrl())
+                .twitterUrl(store.getTwitterUrl())
+                .whatsappNumber(store.getWhatsappNumber())
+                .seoTitle(store.getSeoTitle() != null ? store.getSeoTitle() : store.getName())
+                .seoDescription(store.getSeoDescription() != null ? store.getSeoDescription()
+                        : store.getDescription())
+                .customCss(store.getCustomCss())
                 .sellerEmail(store.getSeller().getEmail())
                 .createdAt(store.getCreatedAt())
                 .build();
