@@ -36,6 +36,8 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
+    private Boolean onboardingCompleted;
+
     @OneToMany(mappedBy = "seller", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     private List<Store> stores = new ArrayList<>();

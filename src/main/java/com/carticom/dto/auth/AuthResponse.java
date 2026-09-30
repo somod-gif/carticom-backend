@@ -19,4 +19,5 @@ public class AuthResponse {
     private String role;
     private Long expiresIn;
     private String tokenType;
+    private Boolean onboardingCompleted;
 }

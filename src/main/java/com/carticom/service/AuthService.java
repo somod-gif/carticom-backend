@@ -33,6 +33,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final SendByteService sendByteService;
+    private final com.carticom.repository.StoreRepository storeRepository;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -53,6 +54,7 @@ public class AuthService {
                 .phone(request.getPhone())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(role)
+                .onboardingCompleted(role != Role.VENDOR)
                 .build();
 
         userRepository.save(user);
@@ -116,7 +118,20 @@ public class AuthService {
                 .role(user.getRole().name())
                 .expiresIn(jwtExpiration / 1000)
                 .tokenType("Bearer")
+                .onboardingCompleted(isOnboardingCompleted(user))
                 .build();
+    }
+
+    /**
+     * Null column falls back to: vendors with a store are considered onboarded
+     * (covers users created before this flag existed).
+     */
+    public Boolean isOnboardingCompleted(User user) {
+        if (user.getOnboardingCompleted() != null) {
+            return user.getOnboardingCompleted();
+        }
+        return user.getRole() != Role.VENDOR
+                || !storeRepository.findBySellerId(user.getId()).isEmpty();
     }
 
     public void forgotPassword(String email) {

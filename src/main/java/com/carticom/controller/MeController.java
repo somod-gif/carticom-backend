@@ -3,6 +3,7 @@ package com.carticom.controller;
 import com.carticom.dto.order.OrderResponse;
 import com.carticom.model.User;
 import com.carticom.repository.UserRepository;
+import com.carticom.service.AuthService;
 import com.carticom.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,6 +25,7 @@ public class MeController {
 
     private final UserRepository userRepository;
     private final OrderService orderService;
+    private final AuthService authService;
 
     @GetMapping
     @Operation(summary = "Get my profile", description = "Returns the profile of the authenticated user")
@@ -36,7 +38,8 @@ public class MeController {
                 "fullName", user.getFullName(),
                 "role", user.getRole().name(),
                 "phone", user.getPhone() != null ? user.getPhone() : "",
-                "createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : ""
+                "createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : "",
+                "onboardingCompleted", authService.isOnboardingCompleted(user)
         ));
     }
 

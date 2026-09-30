@@ -141,8 +141,22 @@ public class AuthController {
                 "fullName", user.getFullName(),
                 "role", user.getRole().name(),
                 "phone", user.getPhone() != null ? user.getPhone() : "",
-                "createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : ""
+                "createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : "",
+                "onboardingCompleted", authService.isOnboardingCompleted(user)
         ));
+    }
+
+    @PostMapping("/onboarding/complete")
+    @Operation(summary = "Mark onboarding complete", description = "Called by the setup wizard when the merchant finishes (or already has) a store")
+    public ResponseEntity<Map<String, Object>> completeOnboarding(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        User user = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        user.setOnboardingCompleted(true);
+        userRepository.save(user);
+        return ResponseEntity.ok(Map.of("success", true, "onboardingCompleted", true));
     }
 
     @PutMapping("/profile")
