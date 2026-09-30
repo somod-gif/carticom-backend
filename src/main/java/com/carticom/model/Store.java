@@ -54,6 +54,8 @@ public class Store {
 
     private String bannerUrl;
 
+    private String status;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;

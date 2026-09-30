@@ -140,16 +140,36 @@ public class StaffInviteService {
     public List<StaffMemberResponse> listStaff(String vendorEmail, Long storeId) {
         Store store = requireOwnedStore(vendorEmail, storeId);
         return storeMemberRepository.findByStoreId(store.getId()).stream()
-                .map(m -> StaffMemberResponse.builder()
-                        .id(m.getUser().getId())
-                        .userId(m.getUser().getId())
-                        .fullName(m.getUser().getFullName())
-                        .email(m.getUser().getEmail())
-                        .role(m.getUser().getRole().name())
-                        .active(true)
-                        .invitedAt(m.getCreatedAt())
-                        .build())
+                .map(m -> {
+                    String fullName = m.getUser().getFullName() != null
+                            ? m.getUser().getFullName().trim() : "";
+                    String[] parts = fullName.split("\\s+", 2);
+                    return StaffMemberResponse.builder()
+                            .id(m.getUser().getId())
+                            .userId(m.getUser().getId())
+                            .storeId(store.getId())
+                            .fullName(fullName)
+                            .firstName(parts.length > 0 ? parts[0] : "")
+                            .lastName(parts.length > 1 ? parts[1] : "")
+                            .email(m.getUser().getEmail())
+                            .role(mapDisplayRole(m.getUser().getRole()))
+                            .status("ACTIVE")
+                            .active(true)
+                            .invitedAt(m.getCreatedAt())
+                            .build();
+                })
                 .toList();
+    }
+
+    private String mapDisplayRole(Role role) {
+        String r = role != null ? role.name() : "STAFF";
+        return switch (r) {
+            case "VENDOR" -> "MANAGER";
+            case "ADMIN" -> "ADMIN";
+            case "CUSTOMER" -> "VIEWER";
+            case "STAFF" -> "STAFF";
+            default -> "STAFF";
+        };
     }
 
     public List<StaffInviteResponse> listInvites(String vendorEmail, Long storeId) {

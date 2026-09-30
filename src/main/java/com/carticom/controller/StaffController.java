@@ -122,4 +122,14 @@ public class StaffController {
                 .map(ResponseEntity::ok)
                 .orElseThrow(() -> new com.carticom.exception.ResourceNotFoundException("Staff member not found"));
     }
+
+    @DeleteMapping("/staff/{staffId}")
+    @Operation(summary = "Remove a staff member", description = "Vendor removes a staff member from their store")
+    public ResponseEntity<Void> removeStaffMember(
+            Authentication authentication,
+            @PathVariable Long staffId) {
+        com.carticom.model.Store store = storeAccessService.resolveStore(authentication.getName());
+        staffInviteService.removeStaff(authentication.getName(), store.getId(), staffId);
+        return ResponseEntity.noContent().build();
+    }
 }

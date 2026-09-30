@@ -5,16 +5,21 @@ import com.carticom.dto.customer.CustomerResponse;
 import com.carticom.exception.BadRequestException;
 import com.carticom.exception.ResourceNotFoundException;
 import com.carticom.model.Customer;
+import com.carticom.model.Order;
 import com.carticom.model.Store;
 import com.carticom.model.User;
 import com.carticom.repository.CustomerRepository;
+import com.carticom.repository.OrderRepository;
 import com.carticom.repository.StoreRepository;
 import com.carticom.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -27,6 +32,7 @@ public class CustomerService {
     private final StoreAccessService storeAccessService;
     private final UserRepository userRepository;
     private final PlanGuard planGuard;
+    private final OrderRepository orderRepository;
 
     public CustomerResponse createCustomer(String sellerEmail, CreateCustomerRequest request) {
         Store store = getStoreBySeller(sellerEmail);
@@ -109,13 +115,44 @@ public class CustomerService {
     }
 
     private CustomerResponse mapToResponse(Customer customer) {
+        List<Order> orders = customer.getId() != null
+                ? orderRepository.findByCustomerId(customer.getId())
+                : List.of();
+
+        String name = customer.getName() != null ? customer.getName().trim() : "";
+        String[] parts = name.split("\\s+", 2);
+        String firstName = parts.length > 0 ? parts[0] : "";
+        String lastName = parts.length > 1 ? parts[1] : "";
+
+        BigDecimal totalSpent = orders.stream()
+                .filter(o -> o.getPaymentStatus() != null && "PAID".equals(o.getPaymentStatus().name()))
+                .map(Order::getTotal)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        LocalDateTime lastOrderDate = orders.stream()
+                .map(Order::getCreatedAt)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+
+        int totalOrders = !orders.isEmpty()
+                ? orders.size()
+                : (customer.getTotalOrders() != null ? customer.getTotalOrders() : 0);
+
         return CustomerResponse.builder()
                 .id(customer.getId())
-                .name(customer.getName())
+                .name(name)
+                .firstName(firstName)
+                .lastName(lastName)
                 .email(customer.getEmail())
                 .phone(customer.getPhone())
                 .address(customer.getAddress())
-                .totalOrders(customer.getTotalOrders())
+                .totalOrders(totalOrders)
+                .totalSpent(totalSpent)
+                .status("ACTIVE")
+                .avatarUrl(null)
+                .lastOrderDate(lastOrderDate)
                 .tags(customer.getTags())
                 .createdAt(customer.getCreatedAt())
                 .build();

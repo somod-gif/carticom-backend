@@ -29,6 +29,7 @@ public class StoreResponse {
     private Map<String, Object> notifications;
     private String logoUrl;
     private String bannerUrl;
+    private String status;
     private String sellerEmail;
     private LocalDateTime createdAt;
 }

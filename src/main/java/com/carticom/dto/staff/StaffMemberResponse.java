@@ -12,9 +12,13 @@ import lombok.NoArgsConstructor;
 public class StaffMemberResponse {
     private Long id;
     private Long userId;
+    private Long storeId;
     private String fullName;
+    private String firstName;
+    private String lastName;
     private String email;
     private String role;
+    private String status;
     private Boolean active;
     private java.time.LocalDateTime invitedAt;
 }

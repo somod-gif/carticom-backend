@@ -99,8 +99,11 @@ public class CategoryController {
         m.put("slug", c.getSlug());
         m.put("description", c.getDescription());
         m.put("imageUrl", c.getImageUrl());
+        m.put("image", c.getImageUrl());
+        m.put("status", "ACTIVE");
         m.put("productCount", productRepository.findByStoreIdAndCategory(c.getStoreId(), c.getName()).size());
         m.put("createdAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : null);
+        m.put("updatedAt", c.getCreatedAt() != null ? c.getCreatedAt().toString() : null);
         return m;
     }
 

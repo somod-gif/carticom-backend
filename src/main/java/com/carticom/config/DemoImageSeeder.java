@@ -42,6 +42,13 @@ public class DemoImageSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
+        storeRepository.findAll().forEach(s -> {
+            if (s.getStatus() == null || s.getStatus().isBlank()) {
+                s.setStatus("ACTIVE");
+                storeRepository.save(s);
+            }
+        });
+
         Store store = storeRepository.findBySlug("amakas-looks").orElse(null);
         if (store == null) {
             log.info("Image seeder: demo store not found - skipping");

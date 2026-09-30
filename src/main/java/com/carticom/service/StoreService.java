@@ -68,6 +68,7 @@ public class StoreService {
                 .address(request.getAddress())
                 .country(request.getCountry())
                 .currency(request.getCurrency())
+                .status("ACTIVE")
                 .seller(seller)
                 .build();
 
@@ -111,6 +112,21 @@ public class StoreService {
         }
 
         storeRepository.save(store);
+        return mapToResponse(store);
+    }
+
+    public StoreResponse setStatus(String sellerEmail, Long storeId, String status) {
+        Store store = storeAccessService.resolveStore(sellerEmail);
+        if (!store.getId().equals(storeId)) {
+            throw new ResourceNotFoundException("Store not found");
+        }
+        String normalized = status != null ? status.trim().toUpperCase() : "";
+        if (!Set.of("ACTIVE", "INACTIVE", "PENDING").contains(normalized)) {
+            throw new BadRequestException("Invalid store status: " + status);
+        }
+        store.setStatus(normalized);
+        storeRepository.save(store);
+        log.info("Store {} status set to {} by {}", store.getId(), normalized, sellerEmail);
         return mapToResponse(store);
     }
 
@@ -254,6 +270,7 @@ public class StoreService {
                 .notifications(notifications)
                 .logoUrl(store.getLogoUrl())
                 .bannerUrl(store.getBannerUrl())
+                .status(store.getStatus() != null ? store.getStatus() : "ACTIVE")
                 .sellerEmail(store.getSeller().getEmail())
                 .createdAt(store.getCreatedAt())
                 .build();

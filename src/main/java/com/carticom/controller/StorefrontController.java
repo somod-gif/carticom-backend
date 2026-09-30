@@ -38,7 +38,7 @@ public class StorefrontController {
 
     public record StorefrontStoreDto(Long id, String name, String slug, String category, String theme,
                                      String layout, Integer productCount, String createdAt,
-                                     String logoUrl, String bannerUrl) {}
+                                     String logoUrl, String bannerUrl, String businessCategory) {}
 
     public record StorefrontProductDto(Long id, Long storeId, String name, String slug, String description,
                                        BigDecimal price, BigDecimal compareAtPrice, String currency,
@@ -171,7 +171,7 @@ public class StorefrontController {
         return new StorefrontStoreDto(
                 s.getId(), s.getName(), s.getSlug(), s.getCategory(), s.getTheme(), s.getLayout(),
                 productCount, s.getCreatedAt() != null ? s.getCreatedAt().toString() : null,
-                s.getLogoUrl(), s.getBannerUrl());
+                s.getLogoUrl(), s.getBannerUrl(), s.getCategory());
     }
 
     private StorefrontProductDto mapProduct(com.carticom.model.Product p) {

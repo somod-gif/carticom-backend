@@ -96,6 +96,31 @@ public class StoreController {
         return ResponseEntity.ok(storeService.updateStore(authentication.getName(), id, body));
     }
 
+    @PatchMapping("/{id}/status")
+    @Operation(summary = "Update store status", description = "Sets store status (ACTIVE, INACTIVE, PENDING)")
+    public ResponseEntity<StoreResponse> updateStoreStatus(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestParam String status) {
+        return ResponseEntity.ok(storeService.setStatus(authentication.getName(), id, status));
+    }
+
+    @PatchMapping("/{id}/publish")
+    @Operation(summary = "Publish store", description = "Sets store status to ACTIVE")
+    public ResponseEntity<StoreResponse> publishStore(
+            Authentication authentication,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(storeService.setStatus(authentication.getName(), id, "ACTIVE"));
+    }
+
+    @PatchMapping("/{id}/unpublish")
+    @Operation(summary = "Unpublish store", description = "Sets store status to INACTIVE")
+    public ResponseEntity<StoreResponse> unpublishStore(
+            Authentication authentication,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(storeService.setStatus(authentication.getName(), id, "INACTIVE"));
+    }
+
     @PutMapping("/me/settings")
     @Operation(summary = "Update store settings",
             description = "Updates name, category, storefront theme and layout for the user's store")

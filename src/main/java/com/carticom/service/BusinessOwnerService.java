@@ -92,18 +92,28 @@ public class BusinessOwnerService {
 
     private OrderSummaryDTO toOrderSummary(Order order) {
         Customer customer = order.getCustomer();
+        String name = customer != null && customer.getName() != null ? customer.getName() : "Guest";
+        String email = customer != null && customer.getEmail() != null ? customer.getEmail() : "";
+        String createdAt = order.getCreatedAt() != null
+                ? order.getCreatedAt().truncatedTo(java.time.temporal.ChronoUnit.MILLIS).toString()
+                : "";
+        Map<String, Object> customerInfo = new LinkedHashMap<>();
+        customerInfo.put("name", name);
+        customerInfo.put("email", email);
+        BigDecimal total = order.getTotal() != null ? order.getTotal() : BigDecimal.ZERO;
         return OrderSummaryDTO.builder()
                 .id(order.getId())
                 .orderId(order.getOrderNumber())
-                .customerName(customer != null && customer.getName() != null ? customer.getName() : "Guest")
-                .customerEmail(customer != null && customer.getEmail() != null ? customer.getEmail() : "")
-                .total(order.getTotal() != null ? order.getTotal() : BigDecimal.ZERO)
+                .customerName(name)
+                .customerEmail(email)
+                .customer(customerInfo)
+                .total(total)
+                .amount(total)
                 .currency("NGN")
                 .status(order.getStatus() != null ? order.getStatus().name() : "PENDING")
                 .items(order.getItems() != null ? order.getItems().size() : 0)
-                .createdAt(order.getCreatedAt() != null
-                        ? order.getCreatedAt().truncatedTo(java.time.temporal.ChronoUnit.MILLIS).toString()
-                        : "")
+                .createdAt(createdAt)
+                .date(createdAt)
                 .build();
     }
 

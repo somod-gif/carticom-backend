@@ -170,7 +170,20 @@ public class ProductService {
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
                 .isLowStock(stock <= threshold)
+                .status(resolveStatus(product.getIsActive(), stock))
+                .categoryName(product.getCategory())
+                .images(product.getImageUrl() != null
+                        ? java.util.List.of(product.getImageUrl())
+                        : java.util.List.of())
+                .inventory(java.util.Map.of("quantity", stock))
                 .build();
+    }
+
+    private String resolveStatus(Boolean isActive, int stock) {
+        if (!Boolean.TRUE.equals(isActive)) {
+            return "DRAFT";
+        }
+        return stock <= 0 ? "OUT_OF_STOCK" : "ACTIVE";
     }
 
     public List<ProductResponse> getProductsByStore(Long storeId) {

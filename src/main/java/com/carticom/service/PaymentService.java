@@ -16,7 +16,9 @@ import com.carticom.model.Subscription;
 import com.carticom.model.SubscriptionStatus;
 import com.carticom.repository.OrderRepository;
 import com.carticom.repository.PaymentRepository;
+import com.carticom.repository.StorePaymentConfigRepository;
 import com.carticom.repository.SubscriptionRepository;
+import com.carticom.model.StorePaymentConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
@@ -48,6 +50,8 @@ public class PaymentService {
     private final WebClient paystackClient;
     private final WebClient flutterwaveClient;
     private final String paystackSecretKey;
+    private final String paystackBaseUrl;
+    private final StorePaymentConfigRepository paymentConfigRepository;
     private final String nombaBaseUrl;
     private final String nombaClientId;
     private final String nombaClientSecret;
@@ -72,7 +76,8 @@ public class PaymentService {
             @Value("${nomba.client-secret}") String nombaClientSecret,
             @Value("${nomba.account-id}") String nombaAccountId,
             @Value("${nomba.base-url}") String nombaBaseUrl,
-            @Value("${app.base-url}") String appBaseUrl) {
+            @Value("${app.base-url}") String appBaseUrl,
+            StorePaymentConfigRepository paymentConfigRepository) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.subscriptionRepository = subscriptionRepository;
@@ -80,6 +85,8 @@ public class PaymentService {
         this.sendByteService = sendByteService;
         this.objectMapper = new ObjectMapper();
         this.paystackSecretKey = paystackKey;
+        this.paystackBaseUrl = paystackUrl;
+        this.paymentConfigRepository = paymentConfigRepository;
         this.nombaClientId = nombaClientId;
         this.nombaClientSecret = nombaClientSecret;
         this.nombaAccountId = nombaAccountId;
@@ -196,9 +203,34 @@ public class PaymentService {
         }
     }
 
+    private String resolvePaystackKey(Payment payment) {
+        try {
+            if (payment != null && payment.getOrder() != null && payment.getOrder().getStore() != null) {
+                Long storeId = payment.getOrder().getStore().getId();
+                String storeKey = paymentConfigRepository.findByStoreId(storeId)
+                        .map(StorePaymentConfig::getPaystackSecretKey)
+                        .orElse(null);
+                if (storeKey != null && !storeKey.isBlank()) {
+                    return storeKey;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Falling back to global Paystack key: {}", e.getMessage());
+        }
+        return paystackSecretKey;
+    }
+
+    private WebClient paystackClientFor(String key) {
+        return WebClient.builder()
+                .baseUrl(paystackBaseUrl)
+                .defaultHeader("Authorization", "Bearer " + key)
+                .build();
+    }
+
     private PaymentInitResponse initPaystack(Payment payment, BigDecimal amount, String reference,
                                              String buyerEmail, String callbackUrl) throws Exception {
-        if (paystackSecretKey == null || paystackSecretKey.isBlank()) {
+        String key = resolvePaystackKey(payment);
+        if (key == null || key.isBlank()) {
             throw new BadRequestException("Paystack is not configured (PAYSTACK_SECRET_KEY missing)");
         }
         Map<String, Object> body = Map.of(
@@ -209,7 +241,7 @@ public class PaymentService {
                 "callback_url", callbackUrl
         );
 
-        String response = paystackClient.post()
+        String response = paystackClientFor(key).post()
                 .uri("/transaction/initialize")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(body)
@@ -314,7 +346,7 @@ public class PaymentService {
         }
 
         ProviderResult result = switch (payment.getMethod()) {
-            case PAYSTACK -> verifyPaystack(payment.getReference());
+                case PAYSTACK -> verifyPaystack(payment);
             case NOMBA -> verifyNomba(payment.getReference());
             case FLUTTERWAVE -> verifyFlutterwave(payment.getReference());
             case CARD, MOBILE_MONEY, BANK_TRANSFER, DVA, CASH_ON_DELIVERY ->
@@ -398,13 +430,14 @@ public class PaymentService {
         }
     }
 
-    private ProviderResult verifyPaystack(String reference) {
-        if (paystackSecretKey == null || paystackSecretKey.isBlank()) {
+    private ProviderResult verifyPaystack(Payment payment) {
+        String key = resolvePaystackKey(payment);
+        if (key == null || key.isBlank()) {
             throw new BadRequestException("Paystack is not configured");
         }
         try {
-            String response = paystackClient.get()
-                    .uri("/transaction/verify/{reference}", reference)
+            String response = paystackClientFor(key).get()
+                    .uri("/transaction/verify/{reference}", payment.getReference())
                     .retrieve()
                     .bodyToMono(String.class)
                     .block();
