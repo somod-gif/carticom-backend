@@ -28,6 +28,11 @@ public class GlobalResponseWrapper implements ResponseBodyAdvice<Object> {
                 || body instanceof byte[] || body instanceof String) {
             return body;
         }
+        String path = request.getURI().getPath();
+        if (path.startsWith("/v3/api-docs") || path.startsWith("/swagger-ui")
+                || path.startsWith("/actuator")) {
+            return body;
+        }
         if (body instanceof Map<?, ?> map && map.containsKey("error")) {
             return body;
         }
