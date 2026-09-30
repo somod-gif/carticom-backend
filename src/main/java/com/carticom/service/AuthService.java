@@ -37,6 +37,9 @@ public class AuthService {
     @Value("${app.base-url}")
     private String baseUrl;
 
+    @Value("${jwt.expiration:86400000}")
+    private long jwtExpiration;
+
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BadRequestException("Email already registered");
@@ -57,15 +60,7 @@ public class AuthService {
 
         String token = jwtTokenProvider.generateToken(user.getEmail());
 
-        return AuthResponse.builder()
-                .userId(user.getId())
-                .token(token)
-                .accessToken(token)
-                .refreshToken(token)
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .role(user.getRole().name())
-                .build();
+        return buildResponse(user, token);
     }
 
     private Role parseRegistrationRole(String rawRole) {
@@ -94,15 +89,7 @@ public class AuthService {
             return null;
         }
         String newToken = jwtTokenProvider.generateToken(user.getEmail());
-        return AuthResponse.builder()
-                .userId(user.getId())
-                .token(newToken)
-                .accessToken(newToken)
-                .refreshToken(newToken)
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .role(user.getRole().name())
-                .build();
+        return buildResponse(user, newToken);
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -115,6 +102,10 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BadRequestException("Invalid credentials"));
 
+        return buildResponse(user, token);
+    }
+
+    private AuthResponse buildResponse(User user, String token) {
         return AuthResponse.builder()
                 .userId(user.getId())
                 .token(token)
@@ -123,6 +114,8 @@ public class AuthService {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .role(user.getRole().name())
+                .expiresIn(jwtExpiration / 1000)
+                .tokenType("Bearer")
                 .build();
     }
 

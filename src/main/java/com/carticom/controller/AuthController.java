@@ -6,16 +6,28 @@ import com.carticom.dto.auth.LoginRequest;
 import com.carticom.dto.auth.MessageResponse;
 import com.carticom.dto.auth.RegisterRequest;
 import com.carticom.dto.auth.ResetPasswordRequest;
+import com.carticom.dto.businessowner.UpdateProfileRequest;
 import com.carticom.dto.common.SuccessResponse;
+import com.carticom.exception.ResourceNotFoundException;
+import com.carticom.model.User;
+import com.carticom.repository.UserRepository;
 import com.carticom.service.AuthService;
+import com.carticom.service.BusinessOwnerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -23,7 +35,35 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Authentication", description = "User registration and login")
 public class AuthController {
 
+    private static final String REFRESH_COOKIE = "carticom_refresh";
+
     private final AuthService authService;
+    private final BusinessOwnerService businessOwnerService;
+    private final UserRepository userRepository;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    @Value("${app.base-url:http://localhost:3000}")
+    private String baseUrl;
+
+    private ResponseCookie refreshCookie(String token, long maxAgeSeconds) {
+        return ResponseCookie.from(REFRESH_COOKIE, token)
+                .httpOnly(true)
+                .path("/")
+                .maxAge(Duration.ofSeconds(maxAgeSeconds))
+                .sameSite("Lax")
+                .secure(baseUrl != null && baseUrl.startsWith("https"))
+                .build();
+    }
+
+    private ResponseCookie clearedRefreshCookie() {
+        return ResponseCookie.from(REFRESH_COOKIE, "")
+                .httpOnly(true)
+                .path("/")
+                .maxAge(Duration.ZERO)
+                .sameSite("Lax")
+                .secure(baseUrl != null && baseUrl.startsWith("https"))
+                .build();
+    }
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user", description = "Creates a new user account and returns JWT token")
@@ -31,7 +71,9 @@ public class AuthController {
     @ApiResponse(responseCode = "400", description = "Email already exists or validation error")
     public ResponseEntity<SuccessResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = authService.register(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(new SuccessResponse<>(true, response));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .header(HttpHeaders.SET_COOKIE, refreshCookie(response.getRefreshToken(), response.getExpiresIn()).toString())
+                .body(new SuccessResponse<>(true, response));
     }
 
     @PostMapping("/login")
@@ -40,27 +82,74 @@ public class AuthController {
     @ApiResponse(responseCode = "401", description = "Invalid credentials")
     public ResponseEntity<SuccessResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
-        return ResponseEntity.ok(new SuccessResponse<>(true, response));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookie(response.getRefreshToken(), response.getExpiresIn()).toString())
+                .body(new SuccessResponse<>(true, response));
     }
 
     public record RefreshRequest(String refreshToken, String accessToken) {
     }
 
     @PostMapping("/refresh")
-    @Operation(summary = "Refresh session", description = "Exchanges a valid refresh/access token for a new token pair")
+    @Operation(summary = "Refresh session", description = "Exchanges a valid refresh/access token or HttpOnly cookie for a new token pair")
     @ApiResponse(responseCode = "200", description = "Token refreshed")
     @ApiResponse(responseCode = "401", description = "Invalid or expired token")
-    public ResponseEntity<SuccessResponse<AuthResponse>> refresh(@RequestBody(required = false) RefreshRequest request) {
-        String token = request != null
-                ? (request.refreshToken() != null && !request.refreshToken().isBlank()
-                        ? request.refreshToken()
-                        : request.accessToken())
-                : null;
+    public ResponseEntity<SuccessResponse<AuthResponse>> refresh(
+            @RequestBody(required = false) String rawBody,
+            @CookieValue(name = REFRESH_COOKIE, required = false) String cookieToken) {
+        String token = null;
+        if (rawBody != null && !rawBody.isBlank()) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(rawBody);
+                String refresh = node.path("refreshToken").asText(null);
+                String access = node.path("accessToken").asText(null);
+                token = refresh != null && !refresh.isBlank() ? refresh : access;
+            } catch (Exception ignored) {
+                // Unparseable body — fall back to the cookie
+            }
+        }
+        if (token == null || token.isBlank()) {
+            token = cookieToken;
+        }
         AuthResponse response = authService.refresh(token);
         if (response == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
+                    .build();
         }
-        return ResponseEntity.ok(new SuccessResponse<>(true, response));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookie(response.getRefreshToken(), response.getExpiresIn()).toString())
+                .body(new SuccessResponse<>(true, response));
+    }
+
+    @PostMapping("/logout")
+    @Operation(summary = "Logout", description = "Clears the HttpOnly refresh cookie")
+    public ResponseEntity<Void> logout() {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
+                .build();
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "Get current user", description = "Returns the profile of the authenticated user")
+    public ResponseEntity<Map<String, Object>> me(Authentication authentication) {
+        User user = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        return ResponseEntity.ok(Map.of(
+                "id", user.getId(),
+                "email", user.getEmail(),
+                "fullName", user.getFullName(),
+                "role", user.getRole().name(),
+                "phone", user.getPhone() != null ? user.getPhone() : "",
+                "createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : ""
+        ));
+    }
+
+    @PutMapping("/profile")
+    @Operation(summary = "Update current user", description = "Updates fullName, phone and business name")
+    public ResponseEntity<Map<String, Object>> updateProfile(Authentication authentication,
+                                                             @RequestBody UpdateProfileRequest request) {
+        return ResponseEntity.ok(businessOwnerService.updateProfile(authentication.getName(), request));
     }
 
     @PostMapping("/forgot-password")
