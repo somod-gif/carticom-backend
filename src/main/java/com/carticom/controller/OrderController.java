@@ -37,6 +37,23 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrders(authentication.getName()));
     }
 
+    @GetMapping("/store/{storeId}")
+    @Operation(summary = "Get orders for a store")
+    public ResponseEntity<List<OrderResponse>> getStoreOrders(
+            Authentication authentication,
+            @PathVariable Long storeId) {
+        return ResponseEntity.ok(orderService.getOrdersForStore(authentication.getName(), storeId));
+    }
+
+    @GetMapping("/store/{storeId}/status/{status}")
+    @Operation(summary = "Get store orders by status")
+    public ResponseEntity<List<OrderResponse>> getStoreOrdersByStatus(
+            Authentication authentication,
+            @PathVariable Long storeId,
+            @PathVariable String status) {
+        return ResponseEntity.ok(orderService.getOrdersForStoreAndStatus(authentication.getName(), storeId, status));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get order by ID")
     public ResponseEntity<OrderResponse> getOrder(

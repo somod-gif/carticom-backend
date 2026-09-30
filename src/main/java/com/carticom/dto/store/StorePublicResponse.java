@@ -16,6 +16,8 @@ public class StorePublicResponse {
     private String name;
     private String slug;
     private String category;
+    private String theme;
+    private String layout;
     private Integer productCount;
     private LocalDateTime createdAt;
 }

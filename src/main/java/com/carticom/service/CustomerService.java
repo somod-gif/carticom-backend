@@ -26,9 +26,11 @@ public class CustomerService {
     private final StoreRepository storeRepository;
     private final StoreAccessService storeAccessService;
     private final UserRepository userRepository;
+    private final PlanGuard planGuard;
 
     public CustomerResponse createCustomer(String sellerEmail, CreateCustomerRequest request) {
         Store store = getStoreBySeller(sellerEmail);
+        planGuard.requireCustomerCapacity(sellerEmail);
 
         if (customerRepository.existsByStoreIdAndEmail(store.getId(), request.getEmail())) {
             throw new BadRequestException("Customer with this email already exists");
@@ -53,6 +55,18 @@ public class CustomerService {
     public List<CustomerResponse> getCustomers(String sellerEmail) {
         Store store = getStoreBySeller(sellerEmail);
         return customerRepository.findByStoreId(store.getId())
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<CustomerResponse> getCustomersForStore(String sellerEmail, Long storeId) {
+        boolean allowed = storeAccessService.resolveStores(sellerEmail).stream()
+                .anyMatch(s -> s.getId().equals(storeId));
+        if (!allowed) {
+            throw new ResourceNotFoundException("Store not found");
+        }
+        return customerRepository.findByStoreId(storeId)
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());

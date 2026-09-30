@@ -28,6 +28,8 @@ public class CreateProductRequest {
     @JsonAlias("stock")
     private Integer stockQuantity = 0;
 
+    private Integer quantity;
+
     private String sku;
 
     private String barcode;

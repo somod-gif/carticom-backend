@@ -24,6 +24,7 @@ import java.util.List;
 public class StaffController {
 
     private final StaffInviteService staffInviteService;
+    private final com.carticom.service.StoreAccessService storeAccessService;
 
     @PostMapping("/stores/{storeId}/staff/invites")
     @Operation(summary = "Invite a staff member", description = "Vendor invites a staff member by email and receives an invite URL")
@@ -73,5 +74,52 @@ public class StaffController {
             @PathVariable String token,
             @Valid @RequestBody AcceptInviteRequest request) {
         return ResponseEntity.ok(staffInviteService.acceptInvite(token, request));
+    }
+
+    @GetMapping("/staff")
+    @Operation(summary = "List staff for caller's store")
+    public ResponseEntity<List<StaffMemberResponse>> listMyStaff(Authentication authentication) {
+        com.carticom.model.Store store = storeAccessService.resolveStore(authentication.getName());
+        return ResponseEntity.ok(staffInviteService.listStaff(authentication.getName(), store.getId()));
+    }
+
+    @GetMapping("/staff/{storeId}/list")
+    @Operation(summary = "List staff for a store")
+    public ResponseEntity<List<StaffMemberResponse>> listStaffForStore(
+            Authentication authentication,
+            @PathVariable Long storeId) {
+        return ResponseEntity.ok(staffInviteService.listStaff(authentication.getName(), storeId));
+    }
+
+    @GetMapping("/staff/{id}")
+    public ResponseEntity<StaffMemberResponse> getStaff(Authentication authentication, @PathVariable Long id) {
+        com.carticom.model.Store store = storeAccessService.resolveStore(authentication.getName());
+        return staffInviteService.listStaff(authentication.getName(), store.getId()).stream()
+                .filter(m -> m.getUserId() != null && m.getUserId().equals(id))
+                .findFirst()
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new com.carticom.exception.ResourceNotFoundException("Staff member not found"));
+    }
+
+    @PostMapping("/staff/invite")
+    public ResponseEntity<StaffInviteResponse> inviteStaff(
+            Authentication authentication,
+            @RequestParam Long storeId,
+            @Valid @RequestBody StaffInviteRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(staffInviteService.createInvite(authentication.getName(), storeId, request.getEmail()));
+    }
+
+    @PutMapping("/staff/{staffId}/permissions")
+    public ResponseEntity<StaffMemberResponse> updatePermissions(
+            Authentication authentication,
+            @PathVariable Long staffId,
+            @RequestBody(required = false) Object body) {
+        com.carticom.model.Store store = storeAccessService.resolveStore(authentication.getName());
+        return staffInviteService.listStaff(authentication.getName(), store.getId()).stream()
+                .filter(m -> m.getUserId() != null && m.getUserId().equals(staffId))
+                .findFirst()
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new com.carticom.exception.ResourceNotFoundException("Staff member not found"));
     }
 }

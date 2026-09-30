@@ -2,6 +2,7 @@ package com.carticom.controller;
 
 import com.carticom.dto.store.CreateStoreRequest;
 import com.carticom.dto.store.StoreResponse;
+import com.carticom.dto.store.UpdateStoreSettingsRequest;
 import com.carticom.service.StoreService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -44,10 +45,61 @@ public class StoreController {
     }
 
     @GetMapping("/me/all")
-    @Operation(summary = "Get all current user's stores", description = "Returns all stores for the authenticated user")
+    @Operation(summary = "Get all current user's stores", description = "Returns the store details for the authenticated user")
     @ApiResponse(responseCode = "200", description = "Stores found")
     public ResponseEntity<List<StoreResponse>> getAllMyStores(Authentication authentication) {
         List<StoreResponse> response = storeService.getAllStoresByUser(authentication.getName());
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping
+    @Operation(summary = "Get current user's stores (list alias)")
+    public ResponseEntity<List<StoreResponse>> listMyStores(Authentication authentication) {
+        return ResponseEntity.ok(storeService.getAllStoresByUser(authentication.getName()));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get store by ID")
+    public ResponseEntity<StoreResponse> getStoreById(
+            Authentication authentication,
+            @PathVariable Long id) {
+        StoreResponse response = storeService.getStoreByUser(authentication.getName());
+        if (!response.getId().equals(id)) {
+            throw new com.carticom.exception.ResourceNotFoundException("Store not found");
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{id}/settings")
+    @Operation(summary = "Get store settings")
+    public ResponseEntity<StoreResponse> getStoreSettings(
+            Authentication authentication,
+            @PathVariable Long id) {
+        StoreResponse response = storeService.getStoreByUser(authentication.getName());
+        if (!response.getId().equals(id)) {
+            throw new com.carticom.exception.ResourceNotFoundException("Store not found");
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Update store (onboarding)")
+    public ResponseEntity<StoreResponse> updateStore(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Object> body) {
+        return ResponseEntity.ok(storeService.updateStore(authentication.getName(), id, body));
+    }
+
+    @PutMapping("/me/settings")
+    @Operation(summary = "Update store settings",
+            description = "Updates name, category, storefront theme and layout for the user's store")
+    @ApiResponse(responseCode = "200", description = "Settings updated")
+    @ApiResponse(responseCode = "400", description = "Unknown theme/layout or validation error")
+    public ResponseEntity<StoreResponse> updateSettings(
+            Authentication authentication,
+            @Valid @RequestBody UpdateStoreSettingsRequest request) {
+        StoreResponse response = storeService.updateSettings(authentication.getName(), request);
         return ResponseEntity.ok(response);
     }
 }

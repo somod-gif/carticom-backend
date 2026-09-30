@@ -18,6 +18,7 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@org.springframework.core.annotation.Order(20)
 @ConditionalOnProperty(name = "seeder.enabled", havingValue = "true")
 public class DemoDataSeeder implements CommandLineRunner {
 
@@ -28,6 +29,8 @@ public class DemoDataSeeder implements CommandLineRunner {
     private final OrderRepository orderRepository;
     private final CustomerRepository customerRepository;
     private final PaymentRepository paymentRepository;
+    private final PlanRepository planRepository;
+    private final SubscriptionRepository subscriptionRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${admin.email}")
@@ -54,8 +57,16 @@ public class DemoDataSeeder implements CommandLineRunner {
                 .name("Amaka's Looks")
                 .slug("amakas-looks")
                 .category("Fashion")
+                .theme("MIDNIGHT")
+                .layout("HERO_GRID")
                 .seller(vendor)
                 .build());
+
+        planRepository.findByName("PRO").ifPresent(pro ->
+                subscriptionRepository.save(Subscription.builder()
+                        .store(store).plan(pro).status(SubscriptionStatus.ACTIVE)
+                        .startDate(LocalDateTime.now()).endDate(LocalDateTime.now().plusYears(1))
+                        .build()));
 
         storeMemberRepository.save(StoreMember.builder().store(store).user(staff).build());
 

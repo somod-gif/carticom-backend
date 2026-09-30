@@ -33,6 +33,7 @@ public class BuyerService {
     private final CustomerRepository customerRepository;
     private final SendByteService sendByteService;
     private final CustomerIntelligenceService customerIntelligenceService;
+    private final PlanGuard planGuard;
 
     public StorePublicResponse getPublicStore(String storeSlug) {
         Store store = storeRepository.findBySlug(storeSlug)
@@ -43,6 +44,8 @@ public class BuyerService {
                 .name(store.getName())
                 .slug(store.getSlug())
                 .category(store.getCategory())
+                .theme(store.getTheme())
+                .layout(store.getLayout())
                 .productCount(productCount)
                 .createdAt(store.getCreatedAt())
                 .build();
@@ -70,9 +73,11 @@ public class BuyerService {
     public BuyerOrderResponse createBuyerOrder(String storeSlug, BuyerOrderRequest request) {
         Store store = storeRepository.findBySlug(storeSlug)
                 .orElseThrow(() -> new ResourceNotFoundException("Store not found"));
+        planGuard.requireOrderCapacity(store);
 
         Customer customer = customerRepository.findByStoreIdAndEmail(store.getId(), request.getCustomerEmail())
                 .orElseGet(() -> {
+                    planGuard.requireCustomerCapacity(store);
                     Customer newCustomer = Customer.builder()
                             .store(store)
                             .name(request.getCustomerName())
@@ -174,6 +179,7 @@ public class BuyerService {
                 .price(product.getPrice())
                 .compareAtPrice(product.getCompareAtPrice())
                 .stockQuantity(product.getStockQuantity())
+                .stock(product.getStockQuantity() != null ? product.getStockQuantity() : 0)
                 .sku(product.getSku())
                 .barcode(product.getBarcode())
                 .imageUrl(product.getImageUrl())

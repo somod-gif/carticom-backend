@@ -27,6 +27,14 @@ public class Store {
 
     private String category;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private String theme = "CLASSIC";
+
+    @Builder.Default
+    @Column(nullable = false)
+    private String layout = "GRID";
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;

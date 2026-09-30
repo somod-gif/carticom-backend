@@ -10,9 +10,13 @@ import com.carticom.model.Order;
 import com.carticom.model.Payment;
 import com.carticom.model.PaymentMethod;
 import com.carticom.model.PaymentStatus;
+import com.carticom.model.Plan;
 import com.carticom.model.Store;
+import com.carticom.model.Subscription;
+import com.carticom.model.SubscriptionStatus;
 import com.carticom.repository.OrderRepository;
 import com.carticom.repository.PaymentRepository;
+import com.carticom.repository.SubscriptionRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
@@ -25,6 +29,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +40,7 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final OrderRepository orderRepository;
+    private final SubscriptionRepository subscriptionRepository;
     private final StoreAccessService storeAccessService;
     private final SendByteService sendByteService;
     private final ObjectMapper objectMapper;
@@ -55,6 +61,7 @@ public class PaymentService {
     public PaymentService(
             PaymentRepository paymentRepository,
             OrderRepository orderRepository,
+            SubscriptionRepository subscriptionRepository,
             StoreAccessService storeAccessService,
             SendByteService sendByteService,
             @Value("${paystack.secret-key}") String paystackKey,
@@ -68,6 +75,7 @@ public class PaymentService {
             @Value("${app.base-url}") String appBaseUrl) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
+        this.subscriptionRepository = subscriptionRepository;
         this.storeAccessService = storeAccessService;
         this.sendByteService = sendByteService;
         this.objectMapper = new ObjectMapper();
@@ -127,12 +135,15 @@ public class PaymentService {
         String callback = (callbackUrl == null || callbackUrl.isBlank())
                 ? appBaseUrl + "/checkout/callback"
                 : callbackUrl;
+        if (!callback.contains("transactionId=")) {
+            callback = callback + (callback.contains("?") ? "&" : "?") + "transactionId=" + reference;
+        }
 
         try {
             PaymentInitResponse response = switch (p) {
-                case "paystack" -> initPaystack(payment, order, reference, buyerEmail, callback);
-                case "nomba" -> initNomba(payment, order, reference, buyerEmail, callback);
-                default -> initFlutterwave(payment, order, reference, buyerEmail, callback);
+                case "paystack" -> initPaystack(payment, order.getTotal(), reference, buyerEmail, callback);
+                case "nomba" -> initNomba(payment, order.getTotal(), reference, buyerEmail, callback);
+                default -> initFlutterwave(payment, order.getTotal(), reference, buyerEmail, callback);
             };
             paymentRepository.save(payment);
             log.info("Payment initialized: ref={} provider={} order={}", reference, p, order.getOrderNumber());
@@ -145,13 +156,53 @@ public class PaymentService {
         }
     }
 
-    private PaymentInitResponse initPaystack(Payment payment, Order order, String reference,
+    @Transactional
+    public PaymentInitResponse initializeForSubscription(Subscription subscription, String provider,
+                                                         String email, String callbackUrl) {
+        String p = provider.toLowerCase();
+        if (!List.of("paystack", "nomba", "flutterwave").contains(p)) {
+            throw new BadRequestException("Unsupported provider: " + provider);
+        }
+
+        Plan plan = subscription.getPlan();
+        String reference = "SUB-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
+        Payment payment = Payment.builder()
+                .subscription(subscription)
+                .method(PaymentMethod.valueOf(p.toUpperCase()))
+                .status(PaymentStatus.PENDING)
+                .amount(plan.getPrice())
+                .reference(reference)
+                .build();
+        paymentRepository.save(payment);
+
+        String callback = (callbackUrl == null || callbackUrl.isBlank())
+                ? appBaseUrl + "/dashboard/subscription"
+                : callbackUrl;
+
+        try {
+            PaymentInitResponse response = switch (p) {
+                case "paystack" -> initPaystack(payment, plan.getPrice(), reference, email, callback);
+                case "nomba" -> initNomba(payment, plan.getPrice(), reference, email, callback);
+                default -> initFlutterwave(payment, plan.getPrice(), reference, email, callback);
+            };
+            paymentRepository.save(payment);
+            log.info("Subscription payment initialized: ref={} provider={} plan={}", reference, p, plan.getName());
+            return response;
+        } catch (BadRequestException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Subscription payment init failed for ref={}: {}", reference, e.getMessage());
+            throw new BadRequestException("Payment initialization failed: " + e.getMessage());
+        }
+    }
+
+    private PaymentInitResponse initPaystack(Payment payment, BigDecimal amount, String reference,
                                              String buyerEmail, String callbackUrl) throws Exception {
         if (paystackSecretKey == null || paystackSecretKey.isBlank()) {
             throw new BadRequestException("Paystack is not configured (PAYSTACK_SECRET_KEY missing)");
         }
         Map<String, Object> body = Map.of(
-                "amount", order.getTotal().multiply(BigDecimal.valueOf(100)).longValue(),
+                "amount", amount.multiply(BigDecimal.valueOf(100)).longValue(),
                 "currency", "NGN",
                 "email", buyerEmail,
                 "reference", reference,
@@ -172,18 +223,18 @@ public class PaymentService {
                 .authorizationUrl(data.path("authorization_url").asText())
                 .accessCode(data.path("access_code").asText())
                 .provider("paystack")
-                .amount(order.getTotal())
+                .amount(amount)
                 .status("pending")
                 .build();
     }
 
-    private PaymentInitResponse initNomba(Payment payment, Order order, String reference,
+    private PaymentInitResponse initNomba(Payment payment, BigDecimal amount, String reference,
                                           String buyerEmail, String callbackUrl) throws Exception {
         String token = getNombaAccessToken();
 
         Map<String, Object> body = Map.of(
                 "order", Map.of(
-                        "amount", order.getTotal().toPlainString(),
+                        "amount", amount.toPlainString(),
                         "currency", "NGN",
                         "orderReference", reference,
                         "callbackUrl", callbackUrl,
@@ -215,15 +266,15 @@ public class PaymentService {
                 .reference(reference)
                 .authorizationUrl(data.path("checkoutLink").asText())
                 .provider("nomba")
-                .amount(order.getTotal())
+                .amount(amount)
                 .status("pending")
                 .build();
     }
 
-    private PaymentInitResponse initFlutterwave(Payment payment, Order order, String reference,
+    private PaymentInitResponse initFlutterwave(Payment payment, BigDecimal amount, String reference,
                                                 String buyerEmail, String callbackUrl) {
         Map<String, Object> body = Map.of(
-                "amount", order.getTotal().toPlainString(),
+                "amount", amount.toPlainString(),
                 "currency", "NGN",
                 "email", buyerEmail,
                 "tx_ref", reference,
@@ -248,7 +299,7 @@ public class PaymentService {
                 .reference(reference)
                 .authorizationUrl(data.path("link").asText())
                 .provider("flutterwave")
-                .amount(order.getTotal())
+                .amount(amount)
                 .status("pending")
                 .build();
     }
@@ -279,37 +330,60 @@ public class PaymentService {
         Order order = payment.getOrder();
 
         if (result.verified()) {
-            BigDecimal expected = order.getTotal();
+            BigDecimal expected = payment.getAmount();
             if (result.amount() == null || result.amount().compareTo(expected) != 0) {
                 log.error("PAYMENT AMOUNT MISMATCH ref={} expected={} providerAmount={} - marking FAILED",
                         payment.getReference(), expected, result.amount());
                 payment.setStatus(PaymentStatus.FAILED);
                 payment.setGatewayResponse("Amount mismatch: expected " + expected + ", got " + result.amount());
-                order.setPaymentStatus(PaymentStatus.FAILED);
                 paymentRepository.save(payment);
-                orderRepository.save(order);
+                if (order != null) {
+                    order.setPaymentStatus(PaymentStatus.FAILED);
+                    orderRepository.save(order);
+                }
                 return buildResponse(payment, "AMOUNT_MISMATCH", false);
             }
 
             payment.setStatus(PaymentStatus.PAID);
             payment.setGatewayResponse(result.message());
-            order.setPaymentStatus(PaymentStatus.PAID);
             paymentRepository.save(payment);
-            orderRepository.save(order);
-            sendReceipts(order);
-            log.info("Payment settled: ref={} order={} amount={}",
-                    payment.getReference(), order.getOrderNumber(), expected);
+            if (order != null) {
+                order.setPaymentStatus(PaymentStatus.PAID);
+                orderRepository.save(order);
+                sendReceipts(order);
+                log.info("Payment settled: ref={} order={} amount={}",
+                        payment.getReference(), order.getOrderNumber(), expected);
+            } else if (payment.getSubscription() != null) {
+                activateSubscription(payment.getSubscription());
+                log.info("Subscription payment settled: ref={} plan={}",
+                        payment.getReference(), payment.getSubscription().getPlan().getName());
+            }
             return buildResponse(payment, "SUCCESS", true);
         }
 
         if (result.terminal()) {
             payment.setStatus(PaymentStatus.FAILED);
             payment.setGatewayResponse(result.message());
-            order.setPaymentStatus(PaymentStatus.FAILED);
             paymentRepository.save(payment);
-            orderRepository.save(order);
+            if (order != null) {
+                order.setPaymentStatus(PaymentStatus.FAILED);
+                orderRepository.save(order);
+            }
         }
         return buildResponse(payment, result.rawStatus(), false);
+    }
+
+    private void activateSubscription(Subscription subscription) {
+        subscriptionRepository.findByStoreIdAndStatus(subscription.getStore().getId(), SubscriptionStatus.ACTIVE)
+                .filter(active -> !active.getId().equals(subscription.getId()))
+                .ifPresent(active -> {
+                    active.setStatus(SubscriptionStatus.CANCELLED);
+                    subscriptionRepository.save(active);
+                });
+        subscription.setStatus(SubscriptionStatus.ACTIVE);
+        subscription.setStartDate(LocalDateTime.now());
+        subscription.setEndDate(LocalDateTime.now().plusMonths(1));
+        subscriptionRepository.save(subscription);
     }
 
     private void sendReceipts(Order order) {
@@ -419,6 +493,9 @@ public class PaymentService {
 
     public PaymentVerifyResponse verifyForSeller(String email, String reference) {
         Payment payment = findPayment(reference);
+        if (payment.getOrder() == null) {
+            throw new BadRequestException("Not an order payment");
+        }
         Store store = storeAccessService.resolveStore(email);
         if (!payment.getOrder().getStore().getId().equals(store.getId())) {
             throw new ForbiddenException("This payment belongs to another store");

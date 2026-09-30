@@ -32,10 +32,12 @@ public class OrderService {
     private final StoreAccessService storeAccessService;
     private final UserRepository userRepository;
     private final SendByteService sendByteService;
+    private final PlanGuard planGuard;
 
     @Transactional
     public OrderResponse createOrder(String sellerEmail, CreateOrderRequest request) {
         Store store = getStoreBySeller(sellerEmail);
+        planGuard.requireOrderCapacity(sellerEmail);
 
         BigDecimal subtotal = BigDecimal.ZERO;
         List<OrderItem> orderItems = new java.util.ArrayList<>();
@@ -170,6 +172,30 @@ public class OrderService {
                 .stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    public List<OrderResponse> getOrdersForStore(String sellerEmail, Long storeId) {
+        requireStoreAccess(sellerEmail, storeId);
+        return orderRepository.findByStoreIdOrderByCreatedAtDesc(storeId)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<OrderResponse> getOrdersForStoreAndStatus(String sellerEmail, Long storeId, String status) {
+        requireStoreAccess(sellerEmail, storeId);
+        return orderRepository.findByStoreIdAndStatus(storeId, OrderStatus.valueOf(status))
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    private void requireStoreAccess(String email, Long storeId) {
+        boolean allowed = storeAccessService.resolveStores(email).stream()
+                .anyMatch(s -> s.getId().equals(storeId));
+        if (!allowed) {
+            throw new ResourceNotFoundException("Store not found");
+        }
     }
 
     private Store getStoreBySeller(String sellerEmail) {

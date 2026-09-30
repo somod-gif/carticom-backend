@@ -27,11 +27,13 @@ public class ProductService {
     private final StoreRepository storeRepository;
     private final StoreAccessService storeAccessService;
     private final UserRepository userRepository;
+    private final PlanGuard planGuard;
 
     public ProductResponse createProduct(String sellerEmail, CreateProductRequest request) {
         Store store = getStoreBySeller(sellerEmail);
 
         String sku = request.getSku();
+        planGuard.requireProductCapacity(sellerEmail);
         if (sku == null || sku.isBlank()) {
             sku = generateSku(store.getId());
             while (productRepository.existsByStoreIdAndSku(store.getId(), sku)) {
@@ -46,7 +48,8 @@ public class ProductService {
                 .description(request.getDescription())
                 .price(request.getPrice())
                 .compareAtPrice(request.getCompareAtPrice())
-                .stockQuantity(request.getStockQuantity() != null ? request.getStockQuantity() : 0)
+                .stockQuantity(request.getQuantity() != null ? request.getQuantity()
+                        : (request.getStockQuantity() != null ? request.getStockQuantity() : 0))
                 .sku(sku)
                 .barcode(request.getBarcode())
                 .imageUrl(request.getImageUrl())
@@ -101,6 +104,7 @@ public class ProductService {
         if (request.getPrice() != null) product.setPrice(request.getPrice());
         if (request.getCompareAtPrice() != null) product.setCompareAtPrice(request.getCompareAtPrice());
         if (request.getStockQuantity() != null) product.setStockQuantity(request.getStockQuantity());
+        if (request.getQuantity() != null) product.setStockQuantity(request.getQuantity());
         if (request.getSku() != null && !request.getSku().isBlank()) product.setSku(request.getSku());
         if (request.getBarcode() != null) product.setBarcode(request.getBarcode());
         if (request.getImageUrl() != null) product.setImageUrl(request.getImageUrl());
@@ -138,26 +142,74 @@ public class ProductService {
     private ProductResponse mapToResponse(Product product) {
         Integer stock = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
         Integer threshold = product.getLowStockThreshold() != null ? product.getLowStockThreshold() : 5;
+        Long storeId = product.getStore() != null ? product.getStore().getId() : null;
         return ProductResponse.builder()
                 .id(product.getId())
+                .storeId(storeId)
                 .name(product.getName())
                 .description(product.getDescription())
                 .price(product.getPrice())
                 .compareAtPrice(product.getCompareAtPrice())
                 .stockQuantity(stock)
+                .stock(stock)
+                .quantity(stock)
                 .sku(product.getSku())
                 .barcode(product.getBarcode())
                 .imageUrl(product.getImageUrl())
                 .category(product.getCategory())
                 .isActive(product.getIsActive())
+                .active(product.getIsActive())
                 .isFeatured(product.getIsFeatured())
+                .digital(false)
+                .currency("NGN")
+                .tenantId(storeId != null ? String.valueOf(storeId) : null)
                 .weight(product.getWeight())
                 .unit(product.getUnit())
                 .lowStockThreshold(threshold)
                 .soldCount(product.getSoldCount() != null ? product.getSoldCount() : 0)
                 .createdAt(product.getCreatedAt())
+                .updatedAt(product.getUpdatedAt())
                 .isLowStock(stock <= threshold)
                 .build();
+    }
+
+    public List<ProductResponse> getProductsByStore(Long storeId) {
+        return productRepository.findByStoreId(storeId).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<ProductResponse> getActiveProductsByStore(Long storeId) {
+        return productRepository.findByStoreIdAndIsActive(storeId, true).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<ProductResponse> searchOwnProducts(String sellerEmail, String q) {
+        Store store = getStoreBySeller(sellerEmail);
+        String needle = q == null ? "" : q.toLowerCase();
+        return productRepository.findByStoreId(store.getId()).stream()
+                .filter(p -> p.getName() != null && p.getName().toLowerCase().contains(needle))
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<ProductResponse> getProductsByOwnCategory(String sellerEmail, String category) {
+        Store store = getStoreBySeller(sellerEmail);
+        return productRepository.findByStoreIdAndCategory(store.getId(), category).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public ProductResponse updateInventory(String sellerEmail, Long productId, int quantityDelta) {
+        Store store = getStoreBySeller(sellerEmail);
+        Product product = productRepository.findById(productId)
+                .filter(p -> p.getStore().getId().equals(store.getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        int current = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
+        product.setStockQuantity(Math.max(0, current + quantityDelta));
+        productRepository.save(product);
+        return mapToResponse(product);
     }
 
     private String generateSku(Long storeId) {

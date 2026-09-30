@@ -141,10 +141,13 @@ public class StaffInviteService {
         Store store = requireOwnedStore(vendorEmail, storeId);
         return storeMemberRepository.findByStoreId(store.getId()).stream()
                 .map(m -> StaffMemberResponse.builder()
+                        .id(m.getUser().getId())
                         .userId(m.getUser().getId())
                         .fullName(m.getUser().getFullName())
                         .email(m.getUser().getEmail())
                         .role(m.getUser().getRole().name())
+                        .active(true)
+                        .invitedAt(m.getCreatedAt())
                         .build())
                 .toList();
     }

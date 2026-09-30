@@ -74,4 +74,45 @@ public class ProductController {
     public ResponseEntity<List<ProductResponse>> getLowStockProducts(Authentication authentication) {
         return ResponseEntity.ok(productService.getLowStockProducts(authentication.getName()));
     }
+
+    @GetMapping("/search")
+    @Operation(summary = "Search products")
+    public ResponseEntity<List<ProductResponse>> searchProducts(
+            Authentication authentication,
+            @RequestParam String q) {
+        return ResponseEntity.ok(productService.searchOwnProducts(authentication.getName(), q));
+    }
+
+    @GetMapping("/store/{storeId}")
+    @Operation(summary = "Get products by store ID")
+    public ResponseEntity<List<ProductResponse>> getProductsByStore(@PathVariable Long storeId) {
+        return ResponseEntity.ok(productService.getProductsByStore(storeId));
+    }
+
+    @GetMapping("/store/{storeId}/active")
+    @Operation(summary = "Get active products by store ID")
+    public ResponseEntity<List<ProductResponse>> getActiveProductsByStore(@PathVariable Long storeId) {
+        return ResponseEntity.ok(productService.getActiveProductsByStore(storeId));
+    }
+
+    @GetMapping("/category/{category}")
+    @Operation(summary = "Get products by category")
+    public ResponseEntity<List<ProductResponse>> getProductsByCategory(
+            Authentication authentication,
+            @PathVariable String category) {
+        return ResponseEntity.ok(productService.getProductsByOwnCategory(authentication.getName(), category));
+    }
+
+    @PatchMapping("/{id}/inventory")
+    @Operation(summary = "Adjust product inventory")
+    public ResponseEntity<ProductResponse> updateInventory(
+            Authentication authentication,
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Object> body) {
+        int delta = 0;
+        if (body.get("quantityDelta") != null) {
+            delta = Integer.parseInt(String.valueOf(body.get("quantityDelta")));
+        }
+        return ResponseEntity.ok(productService.updateInventory(authentication.getName(), id, delta));
+    }
 }

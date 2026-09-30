@@ -30,10 +30,12 @@ public class PosService {
     private final StoreRepository storeRepository;
     private final StoreAccessService storeAccessService;
     private final UserRepository userRepository;
+    private final PlanGuard planGuard;
 
     @Transactional
     public PosCheckoutResponse checkout(String sellerEmail, PosCheckoutRequest request) {
         Store store = getStoreBySeller(sellerEmail);
+        planGuard.requireOrderCapacity(sellerEmail);
 
         BigDecimal totalAmount = BigDecimal.ZERO;
         List<OrderItem> orderItems = new ArrayList<>();

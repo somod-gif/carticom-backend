@@ -35,6 +35,7 @@ public class AiService {
     private final UserRepository userRepository;
     private final StoreRepository storeRepository;
     private final StoreAccessService storeAccessService;
+    private final PlanGuard planGuard;
 
     public AiService(
             @Value("${cencori.api-key}") String apiKey,
@@ -45,7 +46,8 @@ public class AiService {
             BusinessHealthService businessHealthService,
             UserRepository userRepository,
             StoreRepository storeRepository,
-            StoreAccessService storeAccessService) {
+            StoreAccessService storeAccessService,
+            PlanGuard planGuard) {
         this.apiKey = apiKey;
         this.model = model;
         this.businessDataService = businessDataService;
@@ -54,6 +56,7 @@ public class AiService {
         this.userRepository = userRepository;
         this.storeRepository = storeRepository;
         this.storeAccessService = storeAccessService;
+        this.planGuard = planGuard;
         this.objectMapper = new ObjectMapper();
         WebClient.Builder builder = WebClient.builder().baseUrl(baseUrl);
         if (apiKey != null && !apiKey.isBlank()) {
@@ -63,6 +66,7 @@ public class AiService {
     }
 
     public AiChatResponse chat(String sellerEmail, AiChatRequest request) {
+        planGuard.requireFeature(sellerEmail, "ai");
         if (apiKey == null || apiKey.isBlank()) {
             throw new BadRequestException("AI service not configured. Set CENCORI_API_KEY.");
         }
@@ -93,6 +97,7 @@ public class AiService {
     }
 
     public AiInsightsResponse getInsights(String sellerEmail) {
+        planGuard.requireFeature(sellerEmail, "ai");
         if (apiKey == null || apiKey.isBlank()) {
             return AiInsightsResponse.builder()
                     .salesSummary("AI not configured. Set CENCORI_API_KEY environment variable.")

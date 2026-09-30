@@ -1,12 +1,15 @@
 package com.carticom.controller;
 
+import com.carticom.dto.common.SuccessResponse;
 import com.carticom.dto.subscription.PlanResponse;
+import com.carticom.dto.subscription.SubscribeRequest;
 import com.carticom.dto.subscription.SubscriptionResponse;
+import com.carticom.dto.subscription.UpgradeResponse;
 import com.carticom.service.SubscriptionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -21,19 +24,29 @@ public class SubscriptionController {
 
     private final SubscriptionService subscriptionService;
 
+    @GetMapping
+    @Operation(summary = "List caller's subscriptions")
+    public ResponseEntity<List<SubscriptionResponse>> listSubscriptions(Authentication authentication) {
+        try {
+            return ResponseEntity.ok(List.of(subscriptionService.getCurrentSubscription(authentication.getName())));
+        } catch (Exception e) {
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
     @GetMapping("/plans")
     @Operation(summary = "Get all available plans")
-    public ResponseEntity<List<PlanResponse>> getPlans() {
-        return ResponseEntity.ok(subscriptionService.getAllPlans());
+    public ResponseEntity<SuccessResponse<List<PlanResponse>>> getPlans() {
+        return ResponseEntity.ok(new SuccessResponse<>(true, subscriptionService.getAllPlans()));
     }
 
     @PostMapping("/subscribe")
-    @Operation(summary = "Subscribe store to a plan")
-    public ResponseEntity<SubscriptionResponse> subscribe(
+    @Operation(summary = "Subscribe to a plan",
+            description = "FREE activates immediately; paid plans return a checkout authorization URL")
+    public ResponseEntity<UpgradeResponse> subscribe(
             Authentication authentication,
-            @RequestParam String planName) {
-        SubscriptionResponse response = subscriptionService.subscribe(authentication.getName(), planName);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            @Valid @RequestBody SubscribeRequest request) {
+        return ResponseEntity.ok(subscriptionService.startUpgrade(authentication.getName(), request));
     }
 
     @GetMapping("/current")
@@ -43,11 +56,20 @@ public class SubscriptionController {
     }
 
     @PatchMapping("/upgrade")
-    @Operation(summary = "Upgrade/downgrade subscription plan")
-    public ResponseEntity<SubscriptionResponse> changePlan(
+    @Operation(summary = "Upgrade/downgrade subscription plan",
+            description = "FREE activates immediately; paid plans return a checkout authorization URL")
+    public ResponseEntity<UpgradeResponse> changePlan(
             Authentication authentication,
-            @RequestParam String planName) {
-        return ResponseEntity.ok(subscriptionService.changePlan(authentication.getName(), planName));
+            @Valid @RequestBody SubscribeRequest request) {
+        return ResponseEntity.ok(subscriptionService.startUpgrade(authentication.getName(), request));
+    }
+
+    @GetMapping("/upgrade/verify/{reference}")
+    @Operation(summary = "Verify a subscription payment and activate the plan")
+    public ResponseEntity<UpgradeResponse> verifyUpgrade(
+            Authentication authentication,
+            @PathVariable String reference) {
+        return ResponseEntity.ok(subscriptionService.verifyUpgrade(authentication.getName(), reference));
     }
 
     @GetMapping("/check")

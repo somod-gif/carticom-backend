@@ -28,16 +28,19 @@ public class AnalyticsController {
     private final BusinessDataService businessDataService;
     private final UserRepository userRepository;
     private final StoreRepository storeRepository;
+    private final PlanGuard planGuard;
 
     @GetMapping("/dashboard")
     @Operation(summary = "Get dashboard analytics", description = "Returns revenue, orders, products, customers, and charts")
     public ResponseEntity<DashboardResponse> getDashboard(Authentication authentication) {
+        planGuard.requireFeature(authentication.getName(), "analytics");
         return ResponseEntity.ok(analyticsService.getDashboard(authentication.getName()));
     }
 
     @GetMapping("/health-score")
     @Operation(summary = "Get business health score", description = "Returns 0-100 health score with dimension breakdown")
     public ResponseEntity<Map<String, Object>> getHealthScore(Authentication authentication) {
+        planGuard.requireFeature(authentication.getName(), "analytics");
         Store store = getStoreBySeller(authentication.getName());
         return ResponseEntity.ok(businessHealthService.computeHealthScore(store.getId()));
     }
@@ -45,6 +48,7 @@ public class AnalyticsController {
     @GetMapping("/inventory-health")
     @Operation(summary = "Get inventory health", description = "Returns stockout predictions and reorder recommendations")
     public ResponseEntity<?> getInventoryHealth(Authentication authentication) {
+        planGuard.requireFeature(authentication.getName(), "analytics");
         Store store = getStoreBySeller(authentication.getName());
         return ResponseEntity.ok(inventoryIntelligenceService.getInventoryHealth(store.getId()));
     }
@@ -52,6 +56,7 @@ public class AnalyticsController {
     @GetMapping("/business-context")
     @Operation(summary = "Get full business context", description = "Returns all business data for AI analysis")
     public ResponseEntity<Map<String, Object>> getBusinessContext(Authentication authentication) {
+        planGuard.requireFeature(authentication.getName(), "analytics");
         Store store = getStoreBySeller(authentication.getName());
         return ResponseEntity.ok(businessDataService.getFullBusinessContext(store.getId()));
     }

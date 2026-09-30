@@ -37,6 +37,14 @@ public class CustomerController {
         return ResponseEntity.ok(customerService.getCustomers(authentication.getName()));
     }
 
+    @GetMapping("/store/{storeId}")
+    @Operation(summary = "Get customers for a store")
+    public ResponseEntity<List<CustomerResponse>> getStoreCustomers(
+            Authentication authentication,
+            @PathVariable Long storeId) {
+        return ResponseEntity.ok(customerService.getCustomersForStore(authentication.getName(), storeId));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get customer by ID")
     public ResponseEntity<CustomerResponse> getCustomer(

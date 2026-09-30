@@ -20,6 +20,39 @@ public class AiController {
 
     private final AiService aiService;
 
+    @GetMapping
+    @Operation(summary = "AI config (list)")
+    public ResponseEntity<java.util.Map<String, Object>> aiConfig() {
+        return ResponseEntity.ok(defaultAiConfig());
+    }
+
+    @GetMapping("/status/{storeId}")
+    @Operation(summary = "AI status for store")
+    public ResponseEntity<java.util.Map<String, Object>> aiStatus(@PathVariable Long storeId) {
+        return ResponseEntity.ok(defaultAiConfig());
+    }
+
+    @PostMapping("/enable/{storeId}")
+    @Operation(summary = "Enable/disable AI for store")
+    public ResponseEntity<java.util.Map<String, Object>> aiEnable(
+            @PathVariable Long storeId,
+            @RequestBody(required = false) java.util.Map<String, Object> body) {
+        java.util.Map<String, Object> config = defaultAiConfig();
+        if (body != null && body.get("enabled") instanceof Boolean enabled) {
+            config.put("enabled", enabled);
+            config.put("status", enabled ? "ACTIVE" : "DISABLED");
+        }
+        return ResponseEntity.ok(config);
+    }
+
+    private java.util.Map<String, Object> defaultAiConfig() {
+        java.util.Map<String, Object> config = new java.util.LinkedHashMap<>();
+        config.put("enabled", true);
+        config.put("status", "ACTIVE");
+        config.put("whatsappConnected", false);
+        return config;
+    }
+
     @PostMapping("/chat")
     @Operation(summary = "Chat with Carticom AI", description = "Ask business questions and get AI-powered advice")
     public ResponseEntity<AiChatResponse> chat(

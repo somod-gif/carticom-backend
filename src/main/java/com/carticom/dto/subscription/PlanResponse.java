@@ -15,6 +15,14 @@ public class PlanResponse {
     private Long id;
     private String name;
     private BigDecimal price;
+    private BigDecimal monthlyPrice;
+    private BigDecimal yearlyPrice;
+    private String description;
+    private Integer productLimit;
+    private Integer staffLimit;
+    private Boolean paymentsEnabled;
+    private Boolean customDomainEnabled;
+    private Integer durationDays;
     private Integer maxProducts;
     private Integer maxOrdersPerMonth;
     private Integer maxCustomers;
