@@ -16,6 +16,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -114,13 +115,11 @@ public class StaffController {
     public ResponseEntity<StaffMemberResponse> updatePermissions(
             Authentication authentication,
             @PathVariable Long staffId,
-            @RequestBody(required = false) Object body) {
+            @RequestBody(required = false) Map<String, Object> body) {
         com.carticom.model.Store store = storeAccessService.resolveStore(authentication.getName());
-        return staffInviteService.listStaff(authentication.getName(), store.getId()).stream()
-                .filter(m -> m.getUserId() != null && m.getUserId().equals(staffId))
-                .findFirst()
-                .map(ResponseEntity::ok)
-                .orElseThrow(() -> new com.carticom.exception.ResourceNotFoundException("Staff member not found"));
+        String role = body != null && body.get("role") != null ? String.valueOf(body.get("role")) : null;
+        return ResponseEntity.ok(
+                staffInviteService.updateStaffRole(authentication.getName(), store.getId(), staffId, role));
     }
 
     @DeleteMapping("/staff/{staffId}")

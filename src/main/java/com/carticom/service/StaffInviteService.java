@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -152,13 +153,52 @@ public class StaffInviteService {
                             .firstName(parts.length > 0 ? parts[0] : "")
                             .lastName(parts.length > 1 ? parts[1] : "")
                             .email(m.getUser().getEmail())
-                            .role(mapDisplayRole(m.getUser().getRole()))
+                            .role(m.getDisplayRole() != null ? m.getDisplayRole() : mapDisplayRole(m.getUser().getRole()))
                             .status("ACTIVE")
                             .active(true)
                             .invitedAt(m.getCreatedAt())
                             .build();
                 })
                 .toList();
+    }
+
+    private static final Set<String> ALLOWED_DISPLAY_ROLES = Set.of("ADMIN", "MANAGER", "STAFF", "VIEWER");
+
+    /**
+     * Update a team member's store-scoped role (displayRole on the membership).
+     * Deliberately does NOT touch the user's global Role — that would break
+     * their ability to resolve/access this store.
+     */
+    @Transactional
+    public StaffMemberResponse updateStaffRole(String vendorEmail, Long storeId, Long staffId, String role) {
+        Store store = requireOwnedStore(vendorEmail, storeId);
+        String normalized = role != null ? role.trim().toUpperCase() : "";
+        if (!ALLOWED_DISPLAY_ROLES.contains(normalized)) {
+            throw new BadRequestException("Invalid role: " + role + " (expected one of ADMIN, MANAGER, STAFF, VIEWER)");
+        }
+        StoreMember member = storeMemberRepository.findByStoreId(store.getId()).stream()
+                .filter(m -> m.getUser() != null && m.getUser().getId().equals(staffId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Staff member not found"));
+        member.setDisplayRole(normalized);
+        storeMemberRepository.save(member);
+        log.info("Updated staff role: user {} -> {} in store {}", staffId, normalized, store.getName());
+
+        String fullName = member.getUser().getFullName() != null ? member.getUser().getFullName().trim() : "";
+        String[] parts = fullName.split("\\s+", 2);
+        return StaffMemberResponse.builder()
+                .id(member.getUser().getId())
+                .userId(member.getUser().getId())
+                .storeId(store.getId())
+                .fullName(fullName)
+                .firstName(parts.length > 0 ? parts[0] : "")
+                .lastName(parts.length > 1 ? parts[1] : "")
+                .email(member.getUser().getEmail())
+                .role(member.getDisplayRole())
+                .status("ACTIVE")
+                .active(true)
+                .invitedAt(member.getCreatedAt())
+                .build();
     }
 
     private String mapDisplayRole(Role role) {

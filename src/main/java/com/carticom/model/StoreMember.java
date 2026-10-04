@@ -27,6 +27,13 @@ public class StoreMember {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /**
+     * Store-scoped display role (ADMIN / MANAGER / STAFF / VIEWER).
+     * Kept separate from the user's global Role so demoting/promoting a
+     * team member here never breaks their ability to access the store.
+     */
+    private String displayRole;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

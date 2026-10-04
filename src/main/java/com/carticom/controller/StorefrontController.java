@@ -55,10 +55,31 @@ public class StorefrontController {
     @GetMapping("/stores")
     public List<StorefrontStoreDto> listStores(@RequestParam(required = false) String q) {
         return storeRepository.findAll().stream()
+                .filter(s -> s.getStatus() == null || "ACTIVE".equals(s.getStatus()))
                 .filter(s -> q == null || q.isBlank()
                         || (s.getName() != null && s.getName().toLowerCase().contains(q.toLowerCase())))
                 .map(this::mapStore)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Public product detail for the storefront PDP. Inactive products are only
+     * visible to the store owner (dashboard previews).
+     */
+    @GetMapping("/products/{id}")
+    public StorefrontProductDto getProduct(@PathVariable Long id, Authentication authentication) {
+        com.carticom.model.Product p = productRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product not found"));
+        boolean owner = false;
+        if (authentication != null && authentication.getName() != null
+                && !"anonymousUser".equals(authentication.getName())) {
+            owner = p.getStore() != null && p.getStore().getSeller() != null
+                    && authentication.getName().equals(p.getStore().getSeller().getEmail());
+        }
+        if (!owner && !Boolean.TRUE.equals(p.getIsActive())) {
+            throw new ResourceNotFoundException("Product not found");
+        }
+        return mapProduct(p);
     }
 
     @GetMapping("/stores/{slug}")
