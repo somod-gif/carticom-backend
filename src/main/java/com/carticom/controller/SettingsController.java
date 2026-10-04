@@ -18,12 +18,4 @@ public class SettingsController {
     public ResponseEntity<StoreResponse> getSettings(Authentication authentication) {
         return ResponseEntity.ok(storeService.getStoreByUser(authentication.getName()));
     }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<StoreResponse> updateSettings(
-            Authentication authentication,
-            @PathVariable Long id,
-            @RequestBody(required = false) Object body) {
-        return ResponseEntity.ok(storeService.getStoreByUser(authentication.getName()));
-    }
 }

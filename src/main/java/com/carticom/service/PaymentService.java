@@ -45,6 +45,7 @@ public class PaymentService {
     private final SubscriptionRepository subscriptionRepository;
     private final StoreAccessService storeAccessService;
     private final SendByteService sendByteService;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     private final WebClient paystackClient;
@@ -68,6 +69,7 @@ public class PaymentService {
             SubscriptionRepository subscriptionRepository,
             StoreAccessService storeAccessService,
             SendByteService sendByteService,
+            NotificationService notificationService,
             @Value("${paystack.secret-key}") String paystackKey,
             @Value("${paystack.base-url}") String paystackUrl,
             @Value("${flutterwave.secret-key}") String flutterwaveKey,
@@ -83,6 +85,7 @@ public class PaymentService {
         this.subscriptionRepository = subscriptionRepository;
         this.storeAccessService = storeAccessService;
         this.sendByteService = sendByteService;
+        this.notificationService = notificationService;
         this.objectMapper = new ObjectMapper();
         this.paystackSecretKey = paystackKey;
         this.paystackBaseUrl = paystackUrl;
@@ -385,6 +388,10 @@ public class PaymentService {
                 sendReceipts(order);
                 log.info("Payment settled: ref={} order={} amount={}",
                         payment.getReference(), order.getOrderNumber(), expected);
+                notificationService.notifyStoreTeam(order.getStore(), "payment",
+                        "Payment received for " + order.getOrderNumber(),
+                        expected.toPlainString() + " NGN confirmed via "
+                                + (payment.getMethod() != null ? payment.getMethod().name() : "gateway"));
             } else if (payment.getSubscription() != null) {
                 activateSubscription(payment.getSubscription());
                 log.info("Subscription payment settled: ref={} plan={}",
@@ -416,6 +423,11 @@ public class PaymentService {
         subscription.setStartDate(LocalDateTime.now());
         subscription.setEndDate(LocalDateTime.now().plusMonths(1));
         subscriptionRepository.save(subscription);
+
+        notificationService.notifyStoreTeam(subscription.getStore().getId(), "subscription",
+                "Subscription active",
+                (subscription.getPlan() != null ? subscription.getPlan().getName() : "Your plan")
+                        + " is active until " + subscription.getEndDate().toLocalDate() + ".");
     }
 
     private void sendReceipts(Order order) {

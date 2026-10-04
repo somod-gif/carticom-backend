@@ -23,6 +23,7 @@ public class DeliveryService {
     private final StoreRepository storeRepository;
     private final StoreAccessService storeAccessService;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     public DeliveryResponse createDelivery(String sellerEmail, CreateDeliveryRequest request) {
         Store store = getStoreBySeller(sellerEmail);
@@ -48,6 +49,11 @@ public class DeliveryService {
 
         log.info("Delivery created: {} for order {}", delivery.getTrackingNumber(), order.getOrderNumber());
 
+        notificationService.notifyStoreTeam(store, "order",
+                "Order " + order.getOrderNumber() + " is on the way",
+                "Tracking number " + delivery.getTrackingNumber()
+                        + (delivery.getProvider() != null ? " via " + delivery.getProvider().name() : ""));
+
         return mapToResponse(delivery);
     }
 
@@ -70,16 +76,20 @@ public class DeliveryService {
         if (DeliveryStatus.DELIVERED.name().equals(status)) {
             delivery.getOrder().setStatus(OrderStatus.DELIVERED);
             orderRepository.save(delivery.getOrder());
+            notificationService.notifyStoreTeam(store, "order",
+                    "Order " + delivery.getOrder().getOrderNumber() + " delivered",
+                    "Marked delivered for " + delivery.getDropoffAddress());
         }
 
         deliveryRepository.save(delivery);
         return mapToResponse(delivery);
     }
 
-    public DeliveryResponse getByTrackingNumber(String trackingNumber) {
-        return deliveryRepository.findByOrderStoreId(0L).stream()
-                .filter(d -> d.getTrackingNumber().equals(trackingNumber))
-                .findFirst()
+    public DeliveryResponse getByTrackingNumber(String sellerEmail, String trackingNumber) {
+        Store store = getStoreBySeller(sellerEmail);
+        return deliveryRepository.findByTrackingNumber(trackingNumber)
+                .filter(d -> d.getOrder() != null && d.getOrder().getStore() != null
+                        && store.getId().equals(d.getOrder().getStore().getId()))
                 .map(this::mapToResponse)
                 .orElseThrow(() -> new ResourceNotFoundException("Delivery not found"));
     }

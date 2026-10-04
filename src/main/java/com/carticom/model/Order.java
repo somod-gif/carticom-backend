@@ -66,6 +66,13 @@ public class Order {
 
     private String whatsappOrderId;
 
+    /**
+     * Guest cart session that placed this order (X-Cart-Session).
+     * Used to authorize guest access to GET/cancel their own order
+     * without authentication. Null for account orders.
+     */
+    private String guestSession;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();

@@ -31,6 +31,7 @@ public class PosService {
     private final StoreAccessService storeAccessService;
     private final UserRepository userRepository;
     private final PlanGuard planGuard;
+    private final NotificationService notificationService;
 
     @Transactional
     public PosCheckoutResponse checkout(String sellerEmail, PosCheckoutRequest request) {
@@ -56,6 +57,7 @@ public class PosService {
             product.setStockQuantity(product.getStockQuantity() - cartItem.getQuantity());
             product.setSoldCount(product.getSoldCount() + cartItem.getQuantity());
             productRepository.save(product);
+            notificationService.checkLowStock(store.getId(), product);
 
             OrderItem orderItem = OrderItem.builder()
                     .productName(product.getName())
@@ -89,6 +91,7 @@ public class PosService {
         }
         orderItemRepository.saveAll(orderItems);
 
+
         String receiptNumber = "RCP-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
 
         PosTransaction transaction = PosTransaction.builder()
@@ -103,6 +106,10 @@ public class PosService {
                 .build();
 
         posTransactionRepository.save(transaction);
+
+        notificationService.notifyStoreTeam(store, "order",
+                "In-store sale " + order.getOrderNumber(),
+                "POS receipt " + receiptNumber + " — " + finalAmount.toPlainString() + " NGN");
 
         List<PosReceiptItem> receiptItems = orderItems.stream()
                 .map(item -> PosReceiptItem.builder()

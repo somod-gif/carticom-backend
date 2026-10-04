@@ -34,6 +34,7 @@ public class BuyerService {
     private final SendByteService sendByteService;
     private final CustomerIntelligenceService customerIntelligenceService;
     private final PlanGuard planGuard;
+    private final NotificationService notificationService;
 
     public StorePublicResponse getPublicStore(String storeSlug) {
         Store store = storeRepository.findBySlug(storeSlug)
@@ -114,6 +115,7 @@ public class BuyerService {
             product.setStockQuantity(product.getStockQuantity() - itemReq.getQuantity());
             product.setSoldCount(product.getSoldCount() + itemReq.getQuantity());
             productRepository.save(product);
+            notificationService.checkLowStock(store.getId(), product);
         }
 
         Order order = Order.builder()
@@ -138,6 +140,11 @@ public class BuyerService {
             orderItemRepository.save(item);
         }
         order.setItems(orderItems);
+
+        notificationService.notifyStoreTeam(store, "order",
+                "New order " + order.getOrderNumber(),
+                (request.getCustomerName() != null ? request.getCustomerName() : "A customer")
+                        + " placed an order of " + order.getTotal().toPlainString() + " NGN");
 
         try {
             sendByteService.sendOrderNotification(

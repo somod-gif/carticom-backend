@@ -9,6 +9,7 @@ import com.carticom.repository.CustomerRepository;
 import com.carticom.repository.OrderRepository;
 import com.carticom.repository.PaymentRepository;
 import com.carticom.repository.ProductRepository;
+import com.carticom.service.NotificationService;
 import com.carticom.service.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,7 @@ public class GuestCheckoutController {
     private final CustomerRepository customerRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentService paymentService;
+    private final NotificationService notificationService;
 
     @Value("${app.base-url}")
     private String appBaseUrl;
@@ -107,11 +109,18 @@ public class GuestCheckoutController {
             if (product.getStockQuantity() != null) {
                 product.setStockQuantity(Math.max(0, product.getStockQuantity() - qty));
                 productRepository.save(product);
+                notificationService.checkLowStock(req.storeId(), product);
             }
         }
         order.setSubtotal(subtotal);
         order.setTotal(subtotal);
         order = orderRepository.save(order);
+
+        notificationService.notifyStoreTeam(req.storeId(), "order",
+                "New order " + order.getOrderNumber(),
+                (order.getCustomer() != null && order.getCustomer().getName() != null
+                        ? order.getCustomer().getName() : "A customer")
+                        + " placed an order of " + order.getTotal().toPlainString() + " NGN");
 
         String callback = appBaseUrl + "/payment/callback?orderId=" + order.getId()
                 + "&guest=" + order.getOrderNumber();

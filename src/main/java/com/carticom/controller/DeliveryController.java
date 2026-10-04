@@ -47,8 +47,10 @@ public class DeliveryController {
     }
 
     @GetMapping("/tracking/{trackingNumber}")
-    @Operation(summary = "Track delivery", description = "Public tracking by tracking number")
-    public ResponseEntity<DeliveryResponse> track(@PathVariable String trackingNumber) {
-        return ResponseEntity.ok(deliveryService.getByTrackingNumber(trackingNumber));
+    @Operation(summary = "Track delivery", description = "Track a delivery by tracking number (store-scoped)")
+    public ResponseEntity<DeliveryResponse> track(
+            Authentication authentication,
+            @PathVariable String trackingNumber) {
+        return ResponseEntity.ok(deliveryService.getByTrackingNumber(authentication.getName(), trackingNumber));
     }
 }

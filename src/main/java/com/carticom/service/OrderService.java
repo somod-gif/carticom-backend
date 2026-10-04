@@ -33,6 +33,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final SendByteService sendByteService;
     private final PlanGuard planGuard;
+    private final NotificationService notificationService;
 
     @Transactional
     public OrderResponse createOrder(String sellerEmail, CreateOrderRequest request) {
@@ -57,6 +58,7 @@ public class OrderService {
             product.setStockQuantity(product.getStockQuantity() - itemReq.getQuantity());
             product.setSoldCount(product.getSoldCount() + itemReq.getQuantity());
             productRepository.save(product);
+            notificationService.checkLowStock(store.getId(), product);
 
             OrderItem orderItem = OrderItem.builder()
                     .productName(product.getName())
@@ -104,6 +106,11 @@ public class OrderService {
 
         log.info("Order created: {} for store {}", order.getOrderNumber(), store.getName());
 
+        notificationService.notifyStoreTeam(store, "order",
+                "New order " + order.getOrderNumber(),
+                "An order of " + order.getTotal().toPlainString() + " NGN was created"
+                        + (request.getDeliveryAddress() != null ? " with delivery" : ""));
+
         return mapToResponse(order);
     }
 
@@ -138,6 +145,11 @@ public class OrderService {
 
         order.setStatus(OrderStatus.valueOf(status));
         orderRepository.save(order);
+
+        notificationService.notifyStoreTeam(store, "order",
+                "Order " + order.getOrderNumber() + " " + status.toLowerCase(),
+                "Status updated to " + status + ".");
+
 
         try {
             if (order.getCustomer() != null) {

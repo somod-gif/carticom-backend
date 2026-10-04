@@ -6,6 +6,7 @@ import com.carticom.repository.CustomerRepository;
 import com.carticom.repository.OrderRepository;
 import com.carticom.repository.ProductRepository;
 import com.carticom.service.CartService;
+import com.carticom.service.NotificationService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -30,12 +31,14 @@ public class CheckoutController {
     private final OrderRepository orderRepository;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
+    private final NotificationService notificationService;
 
     public record ShippingAddress(String fullName, String phone, String address,
                                   String city, String state, String country) {}
 
     public record CheckoutRequest(String deliveryMethod, String notes, String couponCode,
-                                  ShippingAddress shippingAddress) {}
+                                  ShippingAddress shippingAddress,
+                                  String customerName, String customerEmail, String customerPhone) {}
 
     @PostMapping
     public Map<String, Object> checkout(
@@ -50,12 +53,21 @@ public class CheckoutController {
             throw new BadRequestException("Your cart is empty");
         }
 
-        String customerEmail = authentication != null && authentication.getName() != null
-                && !"anonymousUser".equals(authentication.getName()) ? authentication.getName() : null;
+        boolean authenticated = authentication != null && authentication.getName() != null
+                && !"anonymousUser".equals(authentication.getName());
+        String authEmail = authenticated ? authentication.getName() : null;
 
         ShippingAddress ship = req != null ? req.shippingAddress() : null;
-        String fullName = ship != null && ship.fullName() != null ? ship.fullName() : "Customer";
-        String phone = ship != null && ship.phone() != null ? ship.phone() : null;
+
+        // A3 — always capture customer contact (guest checkout included).
+        String customerEmail = firstNonBlank(authEmail, req != null ? req.customerEmail() : null);
+        String fullName = firstNonBlank(
+                ship != null ? ship.fullName() : null,
+                req != null ? req.customerName() : null,
+                "Customer");
+        String phone = firstNonBlank(
+                ship != null ? ship.phone() : null,
+                req != null ? req.customerPhone() : null);
         String addressLine = ship != null ? buildAddress(ship) : null;
 
         Customer customer = null;
@@ -69,7 +81,24 @@ public class CheckoutController {
                 customer.setPhone(phone);
                 customer.setAddress(addressLine);
                 customer.setTotalOrders(0);
-                customer = customerRepository.save(customer);
+            } else {
+                if (customer.getName() == null || customer.getName().isBlank()) customer.setName(fullName);
+                if (customer.getPhone() == null || customer.getPhone().isBlank()) customer.setPhone(phone);
+                if (customer.getAddress() == null && addressLine != null) customer.setAddress(addressLine);
+            }
+            customer = customerRepository.save(customer);
+        }
+
+        // A4 — validate stock before creating the order (fail fast, no oversell).
+        for (CartItem cartItem : cart.getItems()) {
+            Product p = cartItem.getProduct();
+            if (p == null || p.getStockQuantity() == null) continue;
+            int available = p.getStockQuantity();
+            if (available <= 0) {
+                throw new BadRequestException("\"" + p.getName() + "\" is out of stock");
+            }
+            if (available < cartItem.getQuantity()) {
+                throw new BadRequestException("Only " + available + " left of \"" + p.getName() + "\" in stock");
             }
         }
 
@@ -91,6 +120,7 @@ public class CheckoutController {
         order.setDeliveryPhone(phone);
         order.setDeliveryNotes(req != null ? req.notes() : null);
         order.setChannel(OrderChannel.STOREFRONT);
+        order.setGuestSession(sessionId);
 
         for (CartItem cartItem : cart.getItems()) {
             OrderItem orderItem = new OrderItem();
@@ -103,15 +133,23 @@ public class CheckoutController {
             order.getItems().add(orderItem);
 
             Product product = cartItem.getProduct();
-            if (product != null && product.getStockQuantity() != null) {
-                int newStock = Math.max(0, product.getStockQuantity() - cartItem.getQuantity());
-                product.setStockQuantity(newStock);
+            if (product != null) {
+                if (product.getStockQuantity() != null) {
+                    product.setStockQuantity(Math.max(0, product.getStockQuantity() - cartItem.getQuantity()));
+                }
+                product.setSoldCount((product.getSoldCount() == null ? 0 : product.getSoldCount()) + cartItem.getQuantity());
                 productRepository.save(product);
+                notificationService.checkLowStock(storeId, product);
             }
         }
 
         order = orderRepository.save(order);
         cartService.convertCart(cart.getId());
+
+        notificationService.notifyStoreTeam(storeId, "order",
+                "New order " + order.getOrderNumber(),
+                (fullName != null ? fullName : "A customer") + " placed an order of "
+                        + order.getTotal().toPlainString() + " NGN");
 
         return mapOrder(order, order.getItems());
     }
@@ -128,28 +166,98 @@ public class CheckoutController {
     }
 
     @GetMapping("/orders/{id}")
-    public Map<String, Object> getOrder(@PathVariable Long id) {
+    public Map<String, Object> getOrder(
+            Authentication authentication,
+            @RequestHeader(value = "X-Cart-Session", required = false) String sessionHeader,
+            HttpServletRequest request,
+            @PathVariable Long id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new com.carticom.exception.ResourceNotFoundException("Order not found"));
+        // A9 — order lookup must be authorized: owner (customer/staff/seller) or
+        // the guest cart session that placed it. Everyone else gets a 404.
+        if (!canAccessOrder(order, authentication, sessionHeader, request)) {
+            throw new com.carticom.exception.ResourceNotFoundException("Order not found");
+        }
         return mapOrder(order, null);
     }
 
     @PostMapping("/orders/{id}/cancel")
-    public Map<String, Object> cancelOrder(@PathVariable Long id) {
+    public Map<String, Object> cancelOrder(
+            Authentication authentication,
+            @RequestHeader(value = "X-Cart-Session", required = false) String sessionHeader,
+            HttpServletRequest request,
+            @PathVariable Long id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new com.carticom.exception.ResourceNotFoundException("Order not found"));
+        if (!canAccessOrder(order, authentication, sessionHeader, request)) {
+            throw new com.carticom.exception.ResourceNotFoundException("Order not found");
+        }
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new BadRequestException("Order can no longer be cancelled");
         }
+        // Restore stock the checkout deducted.
+        for (OrderItem item : order.getItems()) {
+            Product product = item.getProduct();
+            if (product != null) {
+                if (product.getStockQuantity() != null) {
+                    product.setStockQuantity(product.getStockQuantity() + item.getQuantity());
+                }
+                if (product.getSoldCount() != null) {
+                    product.setSoldCount(Math.max(0, product.getSoldCount() - item.getQuantity()));
+                }
+                productRepository.save(product);
+            }
+        }
         order.setStatus(OrderStatus.CANCELLED);
         order = orderRepository.save(order);
+        if (order.getStore() != null && order.getStore().getId() != null) {
+            notificationService.notifyStoreTeam(order.getStore().getId(), "order",
+                    "Order " + order.getOrderNumber() + " cancelled",
+                    "The customer cancelled this pending order. Stock has been restored.");
+        }
         return mapOrder(order, null);
+    }
+
+    /** True when the caller owns this order (logged-in customer, store staff/seller,
+     *  or the guest session that placed it). */
+    private boolean canAccessOrder(Order order, Authentication authentication,
+                                   String sessionHeader, HttpServletRequest request) {
+        String guestSession = resolveSessionOrNull(authentication, request);
+        if (order.getGuestSession() != null && guestSession != null
+                && order.getGuestSession().equals(guestSession)) {
+            return true;
+        }
+        String headerSession = sessionHeader != null && !sessionHeader.isBlank() ? sessionHeader.trim() : null;
+        if (order.getGuestSession() != null && headerSession != null
+                && order.getGuestSession().equals(headerSession)) {
+            return true;
+        }
+        boolean authenticated = authentication != null && authentication.getName() != null
+                && !"anonymousUser".equals(authentication.getName());
+        if (!authenticated) return false;
+        String email = authentication.getName();
+        if (order.getCustomer() != null && email.equals(order.getCustomer().getEmail())) {
+            return true;
+        }
+        Store store = order.getStore();
+        if (store != null && store.getSeller() != null && email.equals(store.getSeller().getEmail())) {
+            return true;
+        }
+        return false;
     }
 
     private String resolveSession(String header, Authentication authentication, HttpServletRequest request) {
         if (header != null && !header.isBlank()) {
             return header.trim();
         }
+        String session = resolveSessionOrNull(authentication, request);
+        if (session != null) {
+            return session;
+        }
+        throw new BadRequestException("Cart session not found. Please refresh and try again.");
+    }
+
+    private String resolveSessionOrNull(Authentication authentication, HttpServletRequest request) {
         if (authentication != null && authentication.getName() != null
                 && !"anonymousUser".equals(authentication.getName())) {
             return "cust:" + authentication.getName();
@@ -161,7 +269,15 @@ public class CheckoutController {
                 }
             }
         }
-        throw new BadRequestException("Cart session not found. Please refresh and try again.");
+        return null;
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) return null;
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v.trim();
+        }
+        return null;
     }
 
     private String buildAddress(ShippingAddress ship) {
