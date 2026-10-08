@@ -19,8 +19,13 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -34,6 +39,7 @@ public class AuthService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final SendByteService sendByteService;
     private final com.carticom.repository.StoreRepository storeRepository;
+    private final AuditService auditService;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -81,17 +87,70 @@ public class AuthService {
         return requested;
     }
 
+    /**
+     * Refresh-token rotation ledger: SHA-256 digests of refresh tokens
+     * that have already been redeemed, retained until the token's own
+     * expiry.
+     *
+     * <p>A refresh token may be redeemed exactly once. Presenting a
+     * token that has already been rotated fails closed (the controller
+     * answers 401 and clears the cookie) and is logged as a possible
+     * token theft.
+     *
+     * <p>The ledger is in-memory, so reuse is detected per instance;
+     * in a multi-instance deployment it should be moved to a shared
+     * store (Redis / DB) to cover all nodes.
+     */
+    private final ConcurrentHashMap<String, Long> rotatedRefreshTokens = new ConcurrentHashMap<>();
+
     public AuthResponse refresh(String token) {
         if (token == null || token.isBlank() || !jwtTokenProvider.validateToken(token)) {
             return null;
         }
         String email = jwtTokenProvider.getEmailFromToken(token);
+
+        // Rotation: redeem the token exactly once. putIfAbsent returns
+        // non-null when the digest is already in the ledger, i.e. the
+        // token was redeemed before and has since been rotated.
+        long now = System.currentTimeMillis();
+        purgeExpiredRotations(now);
+        Long rotatedAt = rotatedRefreshTokens.putIfAbsent(
+                digest(token), now + jwtExpiration);
+        if (rotatedAt != null) {
+            log.warn("Refresh token reuse detected for {} - possible token theft", email);
+            auditService.log(email, "UNKNOWN", "refresh_token.reuse_detected", "refresh-token");
+            return null;
+        }
+
         User user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
             return null;
         }
         String newToken = jwtTokenProvider.generateToken(user.getEmail());
         return buildResponse(user, newToken);
+    }
+
+    /**
+     * Drops ledger entries whose token has expired so the map stays
+     * bounded. Only walks the map once it has grown past a batch of
+     * entries, keeping the steady-state cost of a refresh O(1).
+     */
+    private void purgeExpiredRotations(long now) {
+        if (rotatedRefreshTokens.size() < 1024) {
+            return;
+        }
+        rotatedRefreshTokens.entrySet().removeIf(entry -> entry.getValue() < now);
+    }
+
+    private static String digest(String token) {
+        try {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            return Base64.getEncoder().encodeToString(
+                    messageDigest.digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is mandated by the JCA specification, so this is unreachable.
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 
     public AuthResponse login(LoginRequest request) {

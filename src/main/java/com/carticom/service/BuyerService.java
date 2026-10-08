@@ -48,7 +48,10 @@ public class BuyerService {
                 .theme(store.getTheme())
                 .layout(store.getLayout())
                 .productCount(productCount)
+                .announcementBar(store.getAnnouncementBar())
+                .sectionConfig(store.getSectionConfig())
                 .createdAt(store.getCreatedAt())
+                .updatedAt(store.getUpdatedAt())
                 .build();
     }
 

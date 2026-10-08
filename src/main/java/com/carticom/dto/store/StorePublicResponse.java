@@ -36,5 +36,10 @@ public class StorePublicResponse {
     private String twitterUrl;
     private String whatsappNumber;
     private String status;
+    /** Marquee shown above the storefront header (null when there is none). */
+    private String announcementBar;
+    /** Ordered storefront sections as a JSON array, e.g. ["hero","showcase"]. */
+    private String sectionConfig;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

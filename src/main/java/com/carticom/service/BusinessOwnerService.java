@@ -221,6 +221,7 @@ public class BusinessOwnerService {
         profile.put("fullName", user.getFullName());
         profile.put("email", user.getEmail());
         profile.put("phone", user.getPhone() != null ? user.getPhone() : "");
+        profile.put("profileImageUrl", user.getProfileImageUrl() != null ? user.getProfileImageUrl() : "");
         profile.put("role", user.getRole().name());
         profile.put("createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : "");
 
@@ -239,6 +240,9 @@ public class BusinessOwnerService {
         }
         if (request.getPhone() != null) {
             user.setPhone(request.getPhone().trim());
+        }
+        if (request.getProfileImageUrl() != null) {
+            user.setProfileImageUrl(request.getProfileImageUrl().trim());
         }
         userRepository.save(user);
 

@@ -94,6 +94,48 @@ resend:
   api-key: ${RESEND_API_KEY:}
   from-email: ${RESEND_FROM_EMAIL:hello@carticom.dev}
 
+# API rate limiting (com.carticom.ratelimit). Every tier is a token bucket:
+# capacity = burst allowance, refill-tokens delivered every refill-minutes
+# (refill-minutes: 1 makes refill-tokens a plain "per minute" rate).
+# Retune a deployment with the RATELIMIT_* variables below - no code change.
+ratelimit:
+  enabled: ${RATELIMIT_ENABLED:true}
+  # Upper bound on tracked buckets; least recently used are evicted past this.
+  max-entries: ${RATELIMIT_MAX_ENTRIES:50000}
+  # Buckets untouched for this long are dropped by the scheduled cleanup.
+  bucket-idle-seconds: ${RATELIMIT_BUCKET_IDLE_SECONDS:600}
+  tiers:
+    # Credential endpoints (login, register, password reset, invite accept) - per IP.
+    auth:
+      capacity: ${RATELIMIT_AUTH_CAPACITY:10}
+      refill-tokens: ${RATELIMIT_AUTH_REFILL_TOKENS:10}
+      refill-minutes: ${RATELIMIT_AUTH_REFILL_MINUTES:1}
+    # Image / store logo+banner uploads - per user.
+    upload:
+      capacity: ${RATELIMIT_UPLOAD_CAPACITY:30}
+      refill-tokens: ${RATELIMIT_UPLOAD_REFILL_TOKENS:30}
+      refill-minutes: ${RATELIMIT_UPLOAD_REFILL_MINUTES:1}
+    # AI endpoints - 20 requests, one token every ~72 minutes (about 20/day).
+    ai:
+      capacity: ${RATELIMIT_AI_CAPACITY:20}
+      refill-tokens: ${RATELIMIT_AI_REFILL_TOKENS:1}
+      refill-minutes: ${RATELIMIT_AI_REFILL_MINUTES:72}
+    # Public storefront / buyer / cart browsing - per IP.
+    public:
+      capacity: ${RATELIMIT_PUBLIC_CAPACITY:300}
+      refill-tokens: ${RATELIMIT_PUBLIC_REFILL_TOKENS:300}
+      refill-minutes: ${RATELIMIT_PUBLIC_REFILL_MINUTES:1}
+    # Any other POST/PUT/PATCH/DELETE - per user.
+    write:
+      capacity: ${RATELIMIT_WRITE_CAPACITY:60}
+      refill-tokens: ${RATELIMIT_WRITE_REFILL_TOKENS:60}
+      refill-minutes: ${RATELIMIT_WRITE_REFILL_MINUTES:1}
+    # Fallback for every other request.
+    default:
+      capacity: ${RATELIMIT_DEFAULT_CAPACITY:600}
+      refill-tokens: ${RATELIMIT_DEFAULT_REFILL_TOKENS:600}
+      refill-minutes: ${RATELIMIT_DEFAULT_REFILL_MINUTES:1}
+
 springdoc:
   api-docs:
     path: /v3/api-docs

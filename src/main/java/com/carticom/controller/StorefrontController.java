@@ -44,7 +44,8 @@ public class StorefrontController {
                                      String primaryColor, String secondaryColor, String fontFamily,
                                      String facebookUrl, String instagramUrl, String twitterUrl,
                                      String whatsappNumber, String seoTitle, String seoDescription,
-                                     String customCss, String status) {}
+                                     String customCss, String status, String announcementBar,
+                                     String sectionConfig) {}
 
     public record StorefrontProductDto(Long id, Long storeId, String name, String slug, String description,
                                        BigDecimal price, BigDecimal compareAtPrice, String currency,
@@ -206,7 +207,9 @@ public class StorefrontController {
                 s.getSeoTitle() != null ? s.getSeoTitle() : s.getName(),
                 s.getSeoDescription() != null ? s.getSeoDescription() : s.getDescription(),
                 s.getCustomCss(),
-                s.getStatus() != null ? s.getStatus() : "ACTIVE");
+                s.getStatus() != null ? s.getStatus() : "ACTIVE",
+                s.getAnnouncementBar(),
+                s.getSectionConfig());
     }
 
     private StorefrontProductDto mapProduct(com.carticom.model.Product p) {

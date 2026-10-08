@@ -2,6 +2,7 @@ package com.carticom.service;
 
 import com.carticom.dto.store.CreateStoreRequest;
 import com.carticom.dto.store.StoreResponse;
+import com.carticom.dto.store.UpdateStoreBrandingRequest;
 import com.carticom.dto.store.UpdateStoreSettingsRequest;
 import com.carticom.exception.BadRequestException;
 import com.carticom.exception.ResourceNotFoundException;
@@ -11,15 +12,20 @@ import com.carticom.repository.StoreRepository;
 import com.carticom.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,6 +35,44 @@ public class StoreService {
 
     private static final Set<String> THEMES = Set.of("CLASSIC", "MIDNIGHT", "SUNBURST", "BOTANICAL", "MONO");
     private static final Set<String> LAYOUTS = Set.of("GRID", "HERO_GRID", "LIST");
+
+    /** Sections the storefront knows how to render; the only tokens sectionConfig accepts. */
+    private static final Set<String> SECTION_TOKENS = Set.of(
+            "hero", "showcase", "storytelling", "values", "membership", "testimonials",
+            "features", "categories", "instagram", "faq", "newsletter", "announcement");
+
+    private static final String SECTION_CONFIG_ERROR = "sectionConfig must be a JSON array of known "
+            + "sections, for example [\"hero\",\"showcase\"]";
+
+    // ─── Caps for the legacy onboarding payload handled by updateStore(Map) ───
+    private static final int NAME_MAX = 500;
+    private static final int SLUG_MAX = 200;
+    private static final int DESCRIPTION_MAX = 2000;
+    private static final int CATEGORY_MAX = 100;
+    private static final int TEMPLATE_MAX = 50;
+    private static final int COLOR_MAX = 7;
+    private static final int FONT_MAX = 100;
+    private static final int EMAIL_MAX = 200;
+    private static final int PHONE_MAX = 50;
+    private static final int ADDRESS_MAX = 500;
+    private static final int COUNTRY_MAX = 100;
+    private static final int CURRENCY_MAX = 10;
+    private static final int URL_MAX = 500;
+    private static final int SOCIAL_URL_MAX = 300;
+    private static final int WHATSAPP_MAX = 30;
+    private static final int SEO_TITLE_MAX = 70;
+    private static final int SEO_DESCRIPTION_MAX = 160;
+    private static final int CUSTOM_CSS_MAX = 10000;
+    private static final int ANNOUNCEMENT_MAX = 200;
+    private static final int SECTION_CONFIG_MAX = 2000;
+
+    // ─── Shape checks for that legacy payload: values failing one are dropped ───
+    private static final Predicate<String> ANY = value -> true;
+    private static final Predicate<String> HEX_COLOR = value -> value.matches("^#[0-9A-Fa-f]{6}$");
+    private static final Predicate<String> STOREFRONT_URL = value -> value.startsWith("http://")
+            || value.startsWith("https://") || value.startsWith("/");
+    private static final Predicate<String> HTTP_URL = value -> value.startsWith("http://")
+            || value.startsWith("https://");
 
     private final StoreRepository storeRepository;
     private final UserRepository userRepository;
@@ -83,13 +127,18 @@ public class StoreService {
         if (!store.getId().equals(storeId)) {
             throw new ResourceNotFoundException("Store not found");
         }
+
+        // Legacy onboarding payload: every value is capped and shape-checked through
+        // applyCapped, which drops what does not fit instead of failing the wizard.
         String name = str(body.get("storeName"));
         if (name == null) name = str(body.get("name"));
-        if (name != null && !name.isBlank()) store.setName(name.trim());
+        if (name != null && !name.isBlank() && name.trim().length() <= NAME_MAX) {
+            store.setName(name.trim());
+        }
 
         String slug = str(body.get("storeSlug"));
         if (slug == null) slug = str(body.get("slug"));
-        if (slug != null && !slug.isBlank()) {
+        if (slug != null && !slug.isBlank() && slug.trim().length() <= SLUG_MAX) {
             String candidate = sanitizeSlug(slug);
             if (!candidate.equals(store.getSlug()) && storeRepository.existsBySlug(candidate)) {
                 throw new BadRequestException("This store URL is already taken");
@@ -99,13 +148,12 @@ public class StoreService {
 
         String category = str(body.get("businessCategory"));
         if (category == null) category = str(body.get("category"));
-        if (category != null && !category.isBlank()) store.setCategory(category.trim());
+        if (category != null && !category.isBlank() && category.trim().length() <= CATEGORY_MAX) {
+            store.setCategory(category.trim());
+        }
 
         // Storefront template id picked in the dashboard (e.g. "fashion-luxury").
-        String template = str(body.get("template"));
-        if (template != null && !template.isBlank()) {
-            store.setTemplate(template.trim());
-        }
+        applyCapped(body, "template", TEMPLATE_MAX, ANY, store::setTemplate);
         String theme = str(body.get("theme"));
         if (theme != null && THEMES.contains(theme.toUpperCase())) {
             store.setTheme(theme.toUpperCase());
@@ -116,30 +164,35 @@ public class StoreService {
         }
 
         // Business / contact details shown on the public storefront
-        applyIfPresent(body, "description", store::setDescription);
-        applyIfPresent(body, "email", store::setEmail);
-        applyIfPresent(body, "phone", store::setPhone);
-        applyIfPresent(body, "address", store::setAddress);
-        applyIfPresent(body, "country", store::setCountry);
-        applyIfPresent(body, "currency", store::setCurrency);
-        applyIfPresent(body, "logoUrl", store::setLogoUrl);
-        applyIfPresent(body, "bannerUrl", store::setBannerUrl);
+        applyCapped(body, "description", DESCRIPTION_MAX, ANY, store::setDescription);
+        applyCapped(body, "email", EMAIL_MAX, ANY, store::setEmail);
+        applyCapped(body, "phone", PHONE_MAX, ANY, store::setPhone);
+        applyCapped(body, "address", ADDRESS_MAX, ANY, store::setAddress);
+        applyCapped(body, "country", COUNTRY_MAX, ANY, store::setCountry);
+        applyCapped(body, "currency", CURRENCY_MAX, ANY, store::setCurrency);
+        applyCapped(body, "logoUrl", URL_MAX, STOREFRONT_URL, store::setLogoUrl);
+        applyCapped(body, "bannerUrl", URL_MAX, STOREFRONT_URL, store::setBannerUrl);
 
-        // Branding
-        applyIfPresent(body, "primaryColor", store::setPrimaryColor);
-        applyIfPresent(body, "secondaryColor", store::setSecondaryColor);
-        applyIfPresent(body, "fontFamily", store::setFontFamily);
+        // Branding - colours must be a #rrggbb triplet or they are ignored
+        applyCapped(body, "primaryColor", COLOR_MAX, HEX_COLOR, store::setPrimaryColor);
+        applyCapped(body, "secondaryColor", COLOR_MAX, HEX_COLOR, store::setSecondaryColor);
+        applyCapped(body, "fontFamily", FONT_MAX, ANY, store::setFontFamily);
 
         // Social links
-        applyIfPresent(body, "facebookUrl", store::setFacebookUrl);
-        applyIfPresent(body, "instagramUrl", store::setInstagramUrl);
-        applyIfPresent(body, "twitterUrl", store::setTwitterUrl);
-        applyIfPresent(body, "whatsappNumber", store::setWhatsappNumber);
+        applyCapped(body, "facebookUrl", SOCIAL_URL_MAX, HTTP_URL, store::setFacebookUrl);
+        applyCapped(body, "instagramUrl", SOCIAL_URL_MAX, HTTP_URL, store::setInstagramUrl);
+        applyCapped(body, "twitterUrl", SOCIAL_URL_MAX, HTTP_URL, store::setTwitterUrl);
+        applyCapped(body, "whatsappNumber", WHATSAPP_MAX, ANY, store::setWhatsappNumber);
 
-        // SEO + custom CSS
-        applyIfPresent(body, "seoTitle", store::setSeoTitle);
-        applyIfPresent(body, "seoDescription", store::setSeoDescription);
-        applyIfPresent(body, "customCss", store::setCustomCss);
+        // SEO + custom CSS (same sanitiser as the validated branding endpoint)
+        applyCapped(body, "seoTitle", SEO_TITLE_MAX, ANY, store::setSeoTitle);
+        applyCapped(body, "seoDescription", SEO_DESCRIPTION_MAX, ANY, store::setSeoDescription);
+        applyCapped(body, "customCss", CUSTOM_CSS_MAX, this::isSafeCustomCss, store::setCustomCss);
+
+        // Storefront sections / announcement introduced alongside the branding endpoint
+        applyCapped(body, "announcementBar", ANNOUNCEMENT_MAX, ANY, store::setAnnouncementBar);
+        applyCapped(body, "sectionConfig", SECTION_CONFIG_MAX, this::isKnownSectionConfig,
+                store::setSectionConfig);
 
         storeRepository.save(store);
         log.info("Store {} updated by {}", store.getSlug(), sellerEmail);
@@ -147,11 +200,14 @@ public class StoreService {
     }
 
     /**
-     * Applies a text field only when the payload actually contains the key, so a partial
-     * update never wipes unrelated values. Blank strings clear the column (stored as null).
+     * Applies a text field from the legacy onboarding payload only when the payload
+     * actually contains the key, so a partial update never wipes unrelated values.
+     * Blank strings clear the column (stored as null); values that exceed the cap or
+     * fail the shape check are dropped silently, because onboarding must never fail on
+     * a stray field - but garbage is never written either.
      */
-    private void applyIfPresent(Map<String, Object> body, String key,
-                                java.util.function.Consumer<String> setter) {
+    private void applyCapped(Map<String, Object> body, String key, int maxLen,
+                             Predicate<String> shape, Consumer<String> setter) {
         if (body == null || !body.containsKey(key)) {
             return;
         }
@@ -160,7 +216,16 @@ public class StoreService {
             setter.accept(null);
             return;
         }
-        setter.accept(value.trim());
+        String trimmed = value.trim();
+        if (trimmed.length() > maxLen) {
+            log.debug("Ignoring '{}': longer than {} characters", key, maxLen);
+            return;
+        }
+        if (!shape.test(trimmed)) {
+            log.debug("Ignoring '{}': value does not match the expected shape", key);
+            return;
+        }
+        setter.accept(trimmed);
     }
 
     public StoreResponse setStatus(String sellerEmail, Long storeId, String status) {
@@ -264,6 +329,118 @@ public class StoreService {
         return mapToResponse(store);
     }
 
+    /**
+     * Applies the validated storefront branding block: only non-null fields are
+     * written (null = leave unchanged), an empty string clears the free-text fields,
+     * custom CSS is sanitised and sectionConfig is whitelisted against the sections
+     * the storefront can actually render.
+     */
+    public StoreResponse updateBranding(String sellerEmail, Long storeId,
+                                        UpdateStoreBrandingRequest request) {
+        Store store = resolveOwnedStore(sellerEmail, storeId);
+
+        applyBranded(request.getTemplate(), store::setTemplate);
+        applyBranded(request.getPrimaryColor(), store::setPrimaryColor);
+        applyBranded(request.getSecondaryColor(), store::setSecondaryColor);
+        applyBranded(request.getFontFamily(), store::setFontFamily);
+        applyBranded(request.getLogoUrl(), store::setLogoUrl);
+        applyBranded(request.getBannerUrl(), store::setBannerUrl);
+        applyBranded(request.getFacebookUrl(), store::setFacebookUrl);
+        applyBranded(request.getInstagramUrl(), store::setInstagramUrl);
+        applyBranded(request.getTwitterUrl(), store::setTwitterUrl);
+        applyBranded(request.getWhatsappNumber(), store::setWhatsappNumber);
+        applyBranded(request.getSeoTitle(), store::setSeoTitle);
+        applyBranded(request.getSeoDescription(), store::setSeoDescription);
+
+        if (request.getCustomCss() != null) {
+            store.setCustomCss(request.getCustomCss().isBlank()
+                    ? null : sanitizeCustomCss(request.getCustomCss()));
+        }
+        if (request.getAnnouncementBar() != null) {
+            store.setAnnouncementBar(request.getAnnouncementBar().isBlank()
+                    ? null : request.getAnnouncementBar().trim());
+        }
+        if (request.getSectionConfig() != null) {
+            store.setSectionConfig(request.getSectionConfig().isBlank()
+                    ? null : validateSectionConfig(request.getSectionConfig()));
+        }
+
+        store.setUpdatedAt(LocalDateTime.now());
+        storeRepository.save(store);
+        log.info("Store {} branding updated by {}", store.getSlug(), sellerEmail);
+        return mapToResponse(store);
+    }
+
+    /**
+     * Applies a field only when the payload carries it, so a partial update never wipes
+     * unrelated values. An empty string clears the column (stored as null); a non-empty
+     * value is trimmed.
+     */
+    private void applyBranded(String value, Consumer<String> setter) {
+        if (value == null) {
+            return;
+        }
+        setter.accept(value.isBlank() ? null : value.trim());
+    }
+
+    /**
+     * Guards the custom CSS column. The storefront injects this value into a style
+     * block, so anything that could escape it - tags, imports, IE expression(),
+     * javascript: or data:text/html URLs - is rejected outright.
+     *
+     * @throws BadRequestException when the CSS contains a disallowed construct
+     */
+    private String sanitizeCustomCss(String css) {
+        if (!isSafeCustomCss(css)) {
+            throw new BadRequestException(
+                    "customCss may not contain <, >, @import, expression(), javascript: or data:text/html");
+        }
+        return css;
+    }
+
+    private boolean isSafeCustomCss(String css) {
+        if (css == null) {
+            return true;
+        }
+        String lower = css.toLowerCase(Locale.ROOT);
+        return !css.contains("<") && !css.contains(">")
+                && !lower.contains("@import") && !lower.contains("expression(")
+                && !lower.contains("javascript:") && !lower.contains("data:text/html");
+    }
+
+    /**
+     * sectionConfig must be a JSON array of short lowercase tokens the storefront
+     * knows how to render, e.g. {@code ["hero","showcase","testimonials"]}.
+     *
+     * @throws BadRequestException when it is not such an array
+     */
+    private String validateSectionConfig(String sectionConfig) {
+        if (!isKnownSectionConfig(sectionConfig)) {
+            throw new BadRequestException(SECTION_CONFIG_ERROR);
+        }
+        return sectionConfig;
+    }
+
+    private boolean isKnownSectionConfig(String sectionConfig) {
+        if (sectionConfig == null || sectionConfig.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(sectionConfig);
+            if (node == null || !node.isArray() || node.isEmpty()) {
+                return false;
+            }
+            for (JsonNode element : node) {
+                if (!element.isTextual() || !SECTION_TOKENS.contains(element.textValue())) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+    }
+
     private String generateUniqueSlug(String name) {
         String baseSlug = name.toLowerCase()
                 .replaceAll("[^a-z0-9\\s-]", "")
@@ -331,8 +508,11 @@ public class StoreService {
                 .seoDescription(store.getSeoDescription() != null ? store.getSeoDescription()
                         : store.getDescription())
                 .customCss(store.getCustomCss())
+                .announcementBar(store.getAnnouncementBar())
+                .sectionConfig(store.getSectionConfig())
                 .sellerEmail(store.getSeller().getEmail())
                 .createdAt(store.getCreatedAt())
+                .updatedAt(store.getUpdatedAt())
                 .build();
     }
 

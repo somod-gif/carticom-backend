@@ -3,6 +3,7 @@ package com.carticom.model;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -87,6 +88,13 @@ public class Store {
     @Column(columnDefinition = "text")
     private String customCss;
 
+    /** Ordered storefront sections as a JSON array, e.g. ["hero","showcase"]. */
+    @Column(columnDefinition = "text")
+    private String sectionConfig;
+
+    /** Marquee shown above the storefront header; null when there is none. */
+    private String announcementBar;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
@@ -94,4 +102,8 @@ public class Store {
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
+
+    /** Last time branding/settings were written; null until the first update. */
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
 }

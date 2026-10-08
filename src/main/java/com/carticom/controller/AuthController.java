@@ -11,6 +11,7 @@ import com.carticom.dto.common.SuccessResponse;
 import com.carticom.exception.ResourceNotFoundException;
 import com.carticom.model.User;
 import com.carticom.repository.UserRepository;
+import com.carticom.service.AuditService;
 import com.carticom.service.AuthService;
 import com.carticom.service.BusinessOwnerService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Duration;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -41,6 +44,7 @@ public class AuthController {
     private final BusinessOwnerService businessOwnerService;
     private final UserRepository userRepository;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final AuditService auditService;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -71,6 +75,7 @@ public class AuthController {
     @ApiResponse(responseCode = "400", description = "Email already exists or validation error")
     public ResponseEntity<SuccessResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = authService.register(request);
+        audit(() -> auditService.userRegistered(response.getEmail(), response.getRole()));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(response.getRefreshToken(), response.getExpiresIn()).toString())
                 .body(new SuccessResponse<>(true, response));
@@ -82,6 +87,7 @@ public class AuthController {
     @ApiResponse(responseCode = "401", description = "Invalid credentials")
     public ResponseEntity<SuccessResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
+        audit(() -> auditService.userLoggedIn(response.getEmail(), response.getRole()));
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(response.getRefreshToken(), response.getExpiresIn()).toString())
                 .body(new SuccessResponse<>(true, response));
@@ -117,6 +123,7 @@ public class AuthController {
                     .header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
                     .build();
         }
+        audit(() -> auditService.sessionRefreshed(response.getEmail(), response.getRole()));
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, refreshCookie(response.getRefreshToken(), response.getExpiresIn()).toString())
                 .body(new SuccessResponse<>(true, response));
@@ -124,7 +131,9 @@ public class AuthController {
 
     @PostMapping("/logout")
     @Operation(summary = "Logout", description = "Clears the HttpOnly refresh cookie")
-    public ResponseEntity<Void> logout() {
+    public ResponseEntity<Void> logout(Authentication authentication) {
+        String actor = authentication != null ? authentication.getName() : "anonymous";
+        audit(() -> auditService.userLoggedOut(actor, roleOf(authentication)));
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, clearedRefreshCookie().toString())
                 .build();
@@ -141,6 +150,7 @@ public class AuthController {
                 "fullName", user.getFullName(),
                 "role", user.getRole().name(),
                 "phone", user.getPhone() != null ? user.getPhone() : "",
+                "profileImageUrl", user.getProfileImageUrl() != null ? user.getProfileImageUrl() : "",
                 "createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : "",
                 "onboardingCompleted", authService.isOnboardingCompleted(user)
         ));
@@ -160,7 +170,7 @@ public class AuthController {
     }
 
     @PutMapping("/profile")
-    @Operation(summary = "Update current user", description = "Updates fullName, phone and business name")
+    @Operation(summary = "Update current user", description = "Updates fullName, phone, business name and profile image")
     public ResponseEntity<Map<String, Object>> updateProfile(Authentication authentication,
                                                              @RequestBody UpdateProfileRequest request) {
         return ResponseEntity.ok(businessOwnerService.updateProfile(authentication.getName(), request));
@@ -194,6 +204,30 @@ public class AuthController {
             Authentication authentication,
             @RequestBody com.carticom.dto.auth.ChangePasswordRequest request) {
         authService.changePassword(authentication.getName(), request);
+        audit(() -> auditService.passwordChanged(authentication.getName(), roleOf(authentication)));
         return ResponseEntity.ok(new MessageResponse("Password updated successfully"));
+    }
+
+    // ── Audit logging ───────────────────────────────────────────
+    // Audit failures must never break the main request flow.
+
+    private void audit(Runnable action) {
+        try {
+            action.run();
+        } catch (Exception e) {
+            log.warn("Audit log failed: {}", e.getMessage());
+        }
+    }
+
+    private String roleOf(Authentication authentication) {
+        if (authentication == null || authentication.getAuthorities() == null
+                || authentication.getAuthorities().isEmpty()) {
+            return "UNKNOWN";
+        }
+        String authority = authentication.getAuthorities().iterator().next().getAuthority();
+        if (authority == null) {
+            return "UNKNOWN";
+        }
+        return authority.startsWith("ROLE_") ? authority.substring("ROLE_".length()) : authority;
     }
 }

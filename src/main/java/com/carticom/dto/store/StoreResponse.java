@@ -41,6 +41,11 @@ public class StoreResponse {
     private String seoTitle;
     private String seoDescription;
     private String customCss;
+    /** Marquee shown above the storefront header (null when there is none). */
+    private String announcementBar;
+    /** Ordered storefront sections as a JSON array, e.g. ["hero","showcase"]. */
+    private String sectionConfig;
     private String sellerEmail;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }
